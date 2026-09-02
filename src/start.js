@@ -16,6 +16,9 @@ const CHEVRON_SCROLL_AMOUNT = 280;
 let openUnitEl = null;
 let selectedTestFile = null;
 
+document.getElementById('winCloseBtn').addEventListener('click', () => window.close());
+document.getElementById('winMinimizeBtn').addEventListener('click', () => window.api.minimizeWindow());
+
 function showError(message) {
   errorEl.textContent = message;
   errorEl.style.display = message ? 'block' : 'none';

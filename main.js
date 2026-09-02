@@ -88,6 +88,9 @@ function createStartWindow() {
     minWidth: 480,
     minHeight: 520,
     resizable: true,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -545,6 +548,10 @@ ipcMain.handle('end-run', () => {
 
 ipcMain.handle('reveal-in-finder', (_event, filePath) => {
   shell.showItemInFolder(filePath);
+});
+
+ipcMain.handle('minimize-window', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
 
 ipcMain.handle('open-path', (_event, filePath) => {
