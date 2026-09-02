@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   endRun: () => ipcRenderer.invoke('end-run'),
   revealInFinder: (filePath) => ipcRenderer.invoke('reveal-in-finder', filePath),
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
+  quitApp: () => ipcRenderer.invoke('quit-app'),
   openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openResults: (fileName) => ipcRenderer.invoke('open-results', fileName),

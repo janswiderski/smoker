@@ -554,6 +554,10 @@ ipcMain.handle('minimize-window', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
 
+ipcMain.handle('quit-app', () => {
+  app.quit();
+});
+
 ipcMain.handle('open-path', (_event, filePath) => {
   shell.openPath(filePath);
 });

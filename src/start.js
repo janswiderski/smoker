@@ -16,7 +16,7 @@ const CHEVRON_SCROLL_AMOUNT = 280;
 let openUnitEl = null;
 let selectedTestFile = null;
 
-document.getElementById('winCloseBtn').addEventListener('click', () => window.close());
+document.getElementById('winCloseBtn').addEventListener('click', () => window.api.quitApp());
 document.getElementById('winMinimizeBtn').addEventListener('click', () => window.api.minimizeWindow());
 
 function showError(message) {
@@ -58,6 +58,7 @@ function buildShelfUnit(project, tests) {
   prevBtn.textContent = '‹';
   prevBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    wobblePacks(packRow, 'left');
     packRow.scrollBy({ left: -CHEVRON_SCROLL_AMOUNT, behavior: 'smooth' });
   });
 
@@ -69,6 +70,7 @@ function buildShelfUnit(project, tests) {
   nextBtn.textContent = '›';
   nextBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    wobblePacks(packRow, 'right');
     packRow.scrollBy({ left: CHEVRON_SCROLL_AMOUNT, behavior: 'smooth' });
   });
 
@@ -104,6 +106,17 @@ function toggleShelf(unit, packRow, prevBtn, nextBtn) {
   }
 }
 
+function wobblePacks(packRow, direction) {
+  const cls = direction === 'left' ? 'wobble-left' : 'wobble-right';
+  const otherCls = direction === 'left' ? 'wobble-right' : 'wobble-left';
+  packRow.querySelectorAll('.pack').forEach((pack) => {
+    pack.classList.remove(cls, otherCls);
+    void pack.offsetWidth;
+    pack.classList.add(cls);
+    pack.addEventListener('animationend', () => pack.classList.remove(cls), { once: true });
+  });
+}
+
 function updateChevronVisibility(packRow, prevBtn, nextBtn) {
   requestAnimationFrame(() => {
     const overflow = packRow.scrollWidth > packRow.clientWidth + 4;
@@ -124,7 +137,7 @@ function renderPacksInto(packRow, tests, project) {
       <div class="pack-body"><span class="pack-name">${test.name}</span></div>
       <div class="pack-band"></div>
     `;
-    pack.addEventListener('click', () => openActionPanel(test));
+    pack.addEventListener('click', () => openActionPanel(test, PACK_COLORS[i % PACK_COLORS.length]));
     packRow.appendChild(pack);
   });
 
@@ -211,10 +224,15 @@ async function addTestPlanFlow(project) {
   }
 }
 
-function openActionPanel(test) {
+function openActionPanel(test, color) {
   selectedTestFile = test.file;
   actionPlanNameEl.textContent = test.name;
+  const panel = actionOverlay.querySelector('.action-panel');
+  panel.style.setProperty('--pack-color', color || '#2f6fed');
   actionOverlay.style.display = 'flex';
+  panel.classList.remove('flip-in');
+  void panel.offsetWidth;
+  panel.classList.add('flip-in');
 }
 
 function closeActionPanel() {
