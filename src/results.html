@@ -2,11 +2,12 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Smoke Check — Results</title>
+  <title>Smoker — Results</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="results-page">
+    <button id="mainMenuBtn" class="secondary back-btn">← Back to Main Menu</button>
     <h1 id="testTitle">Results</h1>
 
     <div id="runListView">
@@ -15,11 +16,35 @@
     </div>
 
     <div id="runDetailView" style="display:none;">
-      <button id="backBtn" class="secondary back-btn">← Back to runs</button>
+      <div class="run-detail-toolbar">
+        <button id="backBtn" class="secondary">← Back to runs</button>
+        <div class="run-detail-actions">
+          <button id="setBaselineBtn" class="secondary">Set as Baseline</button>
+          <button id="deleteRunBtn" class="secondary danger-outline">Delete Run</button>
+        </div>
+      </div>
       <p class="subtitle" id="runMeta"></p>
       <div id="stepList"></div>
     </div>
   </div>
+
+  <div id="lightbox" class="lightbox" style="display:none;">
+    <div class="lightbox-header">
+      <span id="lightboxTitle"></span>
+      <div class="lightbox-mode-toggle">
+        <button id="modeSideBySideBtn" class="secondary">Side by Side</button>
+        <button id="modeDiffBtn" class="secondary">Diff Highlight</button>
+      </div>
+      <button id="lightboxCloseBtn" class="secondary">Close ✕</button>
+    </div>
+    <div class="lightbox-body" id="lightboxBody"></div>
+    <div class="lightbox-nav">
+      <button id="lightboxPrevBtn" class="secondary">‹ Prev</button>
+      <span id="lightboxStepLabel"></span>
+      <button id="lightboxNextBtn" class="secondary">Next ›</button>
+    </div>
+  </div>
+
   <script src="results.js"></script>
 </body>
 </html>

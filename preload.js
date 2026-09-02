@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   openResults: (fileName) => ipcRenderer.invoke('open-results', fileName),
   listRuns: (fileName) => ipcRenderer.invoke('list-runs', fileName),
   getRunReport: (fileName, runId) => ipcRenderer.invoke('get-run-report', { fileName, runId }),
+  deleteRun: (fileName, runId) => ipcRenderer.invoke('delete-run', { fileName, runId }),
+  setRunAsBaseline: (fileName, runId) => ipcRenderer.invoke('set-run-as-baseline', { fileName, runId }),
   onStepUpdate: (callback) => ipcRenderer.on('step-update', (_event, data) => callback(data)),
   onResultsInit: (callback) => ipcRenderer.on('results-init', (_event, data) => callback(data)),
 });

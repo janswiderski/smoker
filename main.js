@@ -4,6 +4,8 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { compareImages } = require('./lib/diff');
 
+app.setName('Smoker');
+
 const MISMATCH_THRESHOLD_PERCENT = 0.1;
 
 const userDataDir = app.getPath('userData');
@@ -31,6 +33,19 @@ let currentRun = null;
 
 function readTest(fileName) {
   return JSON.parse(fs.readFileSync(path.join(smokeTestsDir, fileName), 'utf-8'));
+}
+
+function getRunIdsAscending(runsDir) {
+  if (!fs.existsSync(runsDir)) return [];
+  return fs
+    .readdirSync(runsDir)
+    .filter((runId) => fs.statSync(path.join(runsDir, runId)).isDirectory())
+    .sort();
+}
+
+function toFileUrl(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  return `${pathToFileURL(filePath).href}?t=${fs.statSync(filePath).mtimeMs}`;
 }
 
 function createStartWindow() {
@@ -251,24 +266,23 @@ ipcMain.handle('list-runs', (_event, fileName) => {
   const json = readTest(fileName);
   const testSlug = slugify(json.name);
   const runsDir = path.join(dataDir, testSlug, 'runs');
-  if (!fs.existsSync(runsDir)) return { testName: json.name, runs: [] };
+  const ascIds = getRunIdsAscending(runsDir);
 
-  const runs = fs
-    .readdirSync(runsDir)
-    .filter((runId) => fs.statSync(path.join(runsDir, runId)).isDirectory())
-    .map((runId) => {
+  const runs = ascIds
+    .map((runId, idx) => {
       const reportPath = path.join(runsDir, runId, 'report.json');
       if (!fs.existsSync(reportPath)) return null;
       const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
       return {
         runId,
+        runNumber: idx + 1,
         finishedAt: report.finishedAt,
         stepCount: report.results.length,
         mismatchCount: report.results.filter((r) => r.status === 'mismatch').length,
       };
     })
     .filter(Boolean)
-    .sort((a, b) => b.runId.localeCompare(a.runId));
+    .reverse();
 
   return { testName: json.name, runs };
 });
@@ -277,20 +291,44 @@ ipcMain.handle('get-run-report', (_event, { fileName, runId }) => {
   const json = readTest(fileName);
   const testSlug = slugify(json.name);
   const baselineDir = path.join(dataDir, testSlug, 'baseline');
-  const reportPath = path.join(dataDir, testSlug, 'runs', runId, 'report.json');
+  const runsDir = path.join(dataDir, testSlug, 'runs');
+  const reportPath = path.join(runsDir, runId, 'report.json');
   const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
 
+  report.runNumber = getRunIdsAscending(runsDir).indexOf(runId) + 1;
   report.results = report.results.map((r) => {
     const baselinePath = path.join(baselineDir, `step-${r.stepId}.png`);
     return {
       ...r,
-      screenshotUrl: fs.existsSync(r.screenshotPath) ? pathToFileURL(r.screenshotPath).href : null,
-      diffUrl: r.diffPath && fs.existsSync(r.diffPath) ? pathToFileURL(r.diffPath).href : null,
-      baselineUrl: fs.existsSync(baselinePath) ? pathToFileURL(baselinePath).href : null,
+      screenshotUrl: toFileUrl(r.screenshotPath),
+      diffUrl: r.diffPath ? toFileUrl(r.diffPath) : null,
+      baselineUrl: toFileUrl(baselinePath),
     };
   });
 
   return report;
+});
+
+ipcMain.handle('delete-run', (_event, { fileName, runId }) => {
+  const json = readTest(fileName);
+  const testSlug = slugify(json.name);
+  const runDir = path.join(dataDir, testSlug, 'runs', runId);
+  fs.rmSync(runDir, { recursive: true, force: true });
+});
+
+ipcMain.handle('set-run-as-baseline', (_event, { fileName, runId }) => {
+  const json = readTest(fileName);
+  const testSlug = slugify(json.name);
+  const baselineDir = path.join(dataDir, testSlug, 'baseline');
+  const reportPath = path.join(dataDir, testSlug, 'runs', runId, 'report.json');
+  const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+
+  fs.mkdirSync(baselineDir, { recursive: true });
+  for (const r of report.results) {
+    if (r.screenshotPath && fs.existsSync(r.screenshotPath)) {
+      fs.copyFileSync(r.screenshotPath, path.join(baselineDir, `step-${r.stepId}.png`));
+    }
+  }
 });
 
 app.whenReady().then(() => {

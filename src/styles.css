@@ -88,6 +88,29 @@ button.secondary:hover { background: #d5d5da; }
 .mismatch-count { color: #ff453a; font-weight: 600; }
 .match-count { color: #30d158; font-weight: 600; }
 
+.run-row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+button.danger-outline {
+  background: transparent;
+  color: #ff453a;
+  border: 1px solid #ff453a;
+}
+button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
+
+.run-detail-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.run-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .step-card {
   border: 1px solid #d8d8dc;
   border-radius: 10px;
@@ -124,6 +147,75 @@ button.secondary:hover { background: #d5d5da; }
   border-radius: 6px;
   border: 1px solid #d8d8dc;
   cursor: pointer;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.94);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+.lightbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  font-size: 13px;
+}
+.lightbox-mode-toggle {
+  display: flex;
+  gap: 8px;
+}
+.lightbox-mode-toggle button.mode-active {
+  background: #0a84ff;
+  color: white;
+}
+.lightbox-body {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  overflow: auto;
+}
+.lightbox-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 46%;
+}
+.lightbox-pane.full { max-width: 88%; }
+.lightbox-pane-label {
+  font-size: 12px;
+  color: #c7c7cc;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lightbox-pane img {
+  max-width: 100%;
+  max-height: 72vh;
+  border-radius: 8px;
+  border: 1px solid #3a3a3c;
+}
+.lightbox-missing {
+  font-size: 13px;
+  color: #8a8a8e;
+  padding: 40px;
+}
+.lightbox-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 14px 20px;
+  font-size: 13px;
+  color: #c7c7cc;
 }
 
 .overlay-panel {

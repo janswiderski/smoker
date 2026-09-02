@@ -1,5 +1,6 @@
 {
-  "name": "smoke-check-app",
+  "name": "smoker",
+  "productName": "Smoker",
   "version": "1.0.0",
   "description": "Overlay app for running manual smoke-test checklists with baseline screenshot diffing",
   "main": "main.js",
