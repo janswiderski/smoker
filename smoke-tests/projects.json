@@ -1,0 +1,6 @@
+[
+  { "id": "core-app", "name": "Core App" },
+  { "id": "checkout", "name": "Checkout" },
+  { "id": "marketing-site", "name": "Marketing Site" },
+  { "id": "internal-tools", "name": "Internal Tools" }
+]

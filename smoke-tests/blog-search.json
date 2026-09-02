@@ -1,0 +1,15 @@
+{
+  "name": "Blog Search",
+  "projectId": "marketing-site",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Blog Search screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Blog Search screen.",
+      "screenshot": true
+    }
+  ]
+}

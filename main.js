@@ -11,19 +11,46 @@ const DEFAULT_MISMATCH_THRESHOLD_PERCENT = 0.1;
 const userDataDir = app.getPath('userData');
 const smokeTestsDir = path.join(userDataDir, 'smoke-tests');
 const dataDir = path.join(userDataDir, 'data');
+const projectsFile = path.join(smokeTestsDir, 'projects.json');
+
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+function readProjects() {
+  if (!fs.existsSync(projectsFile)) return [];
+  return JSON.parse(fs.readFileSync(projectsFile, 'utf-8'));
+}
+
+function writeProjects(projects) {
+  fs.writeFileSync(projectsFile, JSON.stringify(projects, null, 2));
+}
 
 function ensureDirs() {
   fs.mkdirSync(smokeTestsDir, { recursive: true });
   fs.mkdirSync(dataDir, { recursive: true });
-  const bundledExample = path.join(__dirname, 'smoke-tests', 'example-login-flow.json');
-  const destExample = path.join(smokeTestsDir, 'example-login-flow.json');
-  if (fs.existsSync(bundledExample) && !fs.existsSync(destExample)) {
-    fs.copyFileSync(bundledExample, destExample);
-  }
-}
 
-function slugify(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const bundledDir = path.join(__dirname, 'smoke-tests');
+  for (const fileName of fs.readdirSync(bundledDir)) {
+    const dest = path.join(smokeTestsDir, fileName);
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(path.join(bundledDir, fileName), dest);
+    }
+  }
+
+  const projects = readProjects();
+  if (projects.length === 0) return;
+  const validIds = new Set(projects.map((p) => p.id));
+
+  for (const fileName of fs.readdirSync(smokeTestsDir)) {
+    if (fileName === 'projects.json' || !fileName.endsWith('.json')) continue;
+    const filePath = path.join(smokeTestsDir, fileName);
+    const json = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (!validIds.has(json.projectId)) {
+      json.projectId = projects[0].id;
+      fs.writeFileSync(filePath, JSON.stringify(json, null, 2));
+    }
+  }
 }
 
 const OVERLAY_WIDTH = 480;
@@ -56,9 +83,11 @@ function toFileUrl(filePath) {
 
 function createStartWindow() {
   startWindow = new BrowserWindow({
-    width: 640,
-    height: 660,
-    resizable: false,
+    width: 760,
+    height: 800,
+    minWidth: 480,
+    minHeight: 520,
+    resizable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -263,20 +292,38 @@ async function buildCollage(entries) {
 }
 
 ipcMain.handle('list-smoke-tests', () => {
-  const files = fs.readdirSync(smokeTestsDir).filter((f) => f.endsWith('.json'));
+  const files = fs.readdirSync(smokeTestsDir).filter((f) => f.endsWith('.json') && f !== 'projects.json');
   return files.map((f) => {
     const full = path.join(smokeTestsDir, f);
     const json = JSON.parse(fs.readFileSync(full, 'utf-8'));
     return {
       file: f,
       name: json.name || f,
+      projectId: json.projectId || null,
       stepCount: (json.steps || []).length,
       mismatchThreshold: typeof json.mismatchThreshold === 'number' ? json.mismatchThreshold : DEFAULT_MISMATCH_THRESHOLD_PERCENT,
     };
   });
 });
 
-ipcMain.handle('upload-smoke-test', async () => {
+ipcMain.handle('list-projects', () => {
+  return readProjects();
+});
+
+ipcMain.handle('create-project', (_event, name) => {
+  const projects = readProjects();
+  let id = slugify(name);
+  let suffix = 2;
+  while (projects.some((p) => p.id === id)) {
+    id = `${slugify(name)}-${suffix++}`;
+  }
+  const project = { id, name };
+  projects.push(project);
+  writeProjects(projects);
+  return project;
+});
+
+ipcMain.handle('upload-smoke-test', async (_event, projectId) => {
   const result = await dialog.showOpenDialog(startWindow, {
     properties: ['openFile'],
     filters: [{ name: 'JSON', extensions: ['json'] }],
@@ -288,10 +335,18 @@ ipcMain.handle('upload-smoke-test', async () => {
   if (!json.name || !Array.isArray(json.steps) || json.steps.length === 0) {
     throw new Error('Invalid smoke test file: expected { "name": string, "steps": [{ "id", "instruction" }, ...] }');
   }
+  json.projectId = projectId;
 
   const destName = `${slugify(json.name)}.json`;
   fs.writeFileSync(path.join(smokeTestsDir, destName), JSON.stringify(json, null, 2));
-  return { file: destName, name: json.name, stepCount: json.steps.length };
+  return { file: destName, name: json.name, projectId, stepCount: json.steps.length };
+});
+
+ipcMain.handle('delete-smoke-test', (_event, fileName) => {
+  const json = readTest(fileName);
+  const testSlug = slugify(json.name);
+  fs.rmSync(path.join(smokeTestsDir, fileName), { force: true });
+  fs.rmSync(path.join(dataDir, testSlug), { recursive: true, force: true });
 });
 
 ipcMain.handle('open-editor', (_event, fileName) => {

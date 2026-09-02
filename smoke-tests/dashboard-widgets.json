@@ -1,0 +1,15 @@
+{
+  "name": "Dashboard Widgets",
+  "projectId": "core-app",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Dashboard Widgets screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Dashboard Widgets screen.",
+      "screenshot": true
+    }
+  ]
+}

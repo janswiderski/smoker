@@ -1,0 +1,15 @@
+{
+  "name": "Export Flow",
+  "projectId": "internal-tools",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Export Flow screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Export Flow screen.",
+      "screenshot": true
+    }
+  ]
+}

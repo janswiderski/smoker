@@ -1,0 +1,15 @@
+{
+  "name": "Payment Flow",
+  "projectId": "checkout",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Payment Flow screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Payment Flow screen.",
+      "screenshot": true
+    }
+  ]
+}

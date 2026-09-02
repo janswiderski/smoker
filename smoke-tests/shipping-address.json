@@ -1,0 +1,15 @@
+{
+  "name": "Shipping Address",
+  "projectId": "checkout",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Shipping Address screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Shipping Address screen.",
+      "screenshot": true
+    }
+  ]
+}

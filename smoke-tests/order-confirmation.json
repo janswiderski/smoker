@@ -1,0 +1,15 @@
+{
+  "name": "Order Confirmation",
+  "projectId": "checkout",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Order Confirmation screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Order Confirmation screen.",
+      "screenshot": true
+    }
+  ]
+}

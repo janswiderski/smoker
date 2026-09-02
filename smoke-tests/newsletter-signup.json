@@ -1,0 +1,15 @@
+{
+  "name": "Newsletter Signup",
+  "projectId": "marketing-site",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Newsletter Signup screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Newsletter Signup screen.",
+      "screenshot": true
+    }
+  ]
+}

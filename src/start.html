@@ -6,19 +6,48 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="start-page">
-    <h1>Smoker</h1>
-    <p class="subtitle">Choose a smoke test checklist to run, or upload a new one.</p>
-    <div id="error" class="error-banner" style="display:none;"></div>
-    <div id="testList" class="test-list"></div>
-    <div class="actions-row">
-      <button id="uploadBtn" class="secondary">Upload Smoke Test…</button>
-      <button id="editBtn" class="secondary" disabled>Edit…</button>
-      <button id="downloadBtn" class="secondary" disabled>Download</button>
-      <button id="resultsBtn" class="secondary" disabled>View Results</button>
-      <button id="startBtn" class="primary" disabled>Start Run</button>
+  <div id="error" class="error-banner floating" style="display:none;"></div>
+
+  <div id="projectsView" class="cabinet-page">
+    <div class="cabinet">
+      <div class="cabinet-header">
+        <span class="cabinet-logo">SMOKER</span>
+        <span class="cabinet-led"></span>
+      </div>
+      <div class="cabinet-shelves" id="projectList"></div>
+      <div class="cabinet-drawer">
+        <div class="drawer-handle"></div>
+        <span class="drawer-keyhole"></span>
+      </div>
     </div>
   </div>
+
+  <div id="shelfView" class="shelf-page" style="display:none;">
+    <div class="shelf-toolbar">
+      <button id="backToProjectsBtn" class="secondary">← Back to Projects</button>
+      <h2 id="shelfProjectName"></h2>
+    </div>
+    <div class="pack-row-wrapper">
+      <button id="packPrevBtn" class="chevron-btn" aria-label="Scroll left">‹</button>
+      <div class="pack-row" id="packRow"></div>
+      <button id="packNextBtn" class="chevron-btn" aria-label="Scroll right">›</button>
+    </div>
+  </div>
+
+  <div id="actionOverlay" class="action-overlay" style="display:none;">
+    <div class="action-panel">
+      <h3 id="actionPlanName"></h3>
+      <div class="action-buttons">
+        <button id="actionStartBtn" class="primary">Start Run</button>
+        <button id="actionResultsBtn" class="secondary">View Test Runs</button>
+        <button id="actionEditBtn" class="secondary">Edit</button>
+        <button id="actionDownloadBtn" class="secondary">Download</button>
+        <button id="actionDeleteBtn" class="secondary danger-outline">Delete</button>
+      </div>
+      <button id="actionBackBtn" class="secondary action-back">← Back</button>
+    </div>
+  </div>
+
   <script src="start.js"></script>
 </body>
 </html>

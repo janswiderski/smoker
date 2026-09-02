@@ -1,0 +1,15 @@
+{
+  "name": "Coupon Code",
+  "projectId": "checkout",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Coupon Code screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Coupon Code screen.",
+      "screenshot": true
+    }
+  ]
+}

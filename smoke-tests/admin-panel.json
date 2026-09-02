@@ -1,0 +1,15 @@
+{
+  "name": "Admin Panel",
+  "projectId": "internal-tools",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Admin Panel screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Admin Panel screen.",
+      "screenshot": true
+    }
+  ]
+}

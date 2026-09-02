@@ -1,0 +1,15 @@
+{
+  "name": "Notification Center",
+  "projectId": "core-app",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Notification Center screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Notification Center screen.",
+      "screenshot": true
+    }
+  ]
+}

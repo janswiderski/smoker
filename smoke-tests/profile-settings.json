@@ -1,0 +1,15 @@
+{
+  "name": "Profile Settings",
+  "projectId": "core-app",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Profile Settings screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Profile Settings screen.",
+      "screenshot": true
+    }
+  ]
+}

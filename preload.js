@@ -2,7 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   listSmokeTests: () => ipcRenderer.invoke('list-smoke-tests'),
-  uploadSmokeTest: () => ipcRenderer.invoke('upload-smoke-test'),
+  listProjects: () => ipcRenderer.invoke('list-projects'),
+  createProject: (name) => ipcRenderer.invoke('create-project', name),
+  uploadSmokeTest: (projectId) => ipcRenderer.invoke('upload-smoke-test', projectId),
+  deleteSmokeTest: (fileName) => ipcRenderer.invoke('delete-smoke-test', fileName),
   openEditor: (fileName) => ipcRenderer.invoke('open-editor', fileName),
   saveTestContent: (fileName, content) => ipcRenderer.invoke('save-test-content', { fileName, content }),
   downloadTestPlan: (fileName) => ipcRenderer.invoke('download-test-plan', fileName),

@@ -1,0 +1,15 @@
+{
+  "name": "Guest Checkout",
+  "projectId": "checkout",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Guest Checkout screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Guest Checkout screen.",
+      "screenshot": true
+    }
+  ]
+}

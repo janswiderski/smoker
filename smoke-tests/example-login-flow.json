@@ -1,5 +1,6 @@
 {
   "name": "Login Flow",
+  "projectId": "core-app",
   "steps": [
     { "id": 1, "instruction": "Open the app's login page in your browser: https://example.com/login" },
     { "id": 2, "instruction": "Take a screenshot of the empty login form.", "screenshot": true },

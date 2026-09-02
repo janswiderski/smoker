@@ -1,0 +1,15 @@
+{
+  "name": "Cart Flow",
+  "projectId": "checkout",
+  "steps": [
+    {
+      "id": 1,
+      "instruction": "Navigate to the Cart Flow screen."
+    },
+    {
+      "id": 2,
+      "instruction": "Take a screenshot of the Cart Flow screen.",
+      "screenshot": true
+    }
+  ]
+}
