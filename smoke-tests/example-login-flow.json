@@ -1,7 +1,7 @@
 {
   "name": "Login Flow",
   "steps": [
-    { "id": 1, "instruction": "Open the app's login page in your browser." },
+    { "id": 1, "instruction": "Open the app's login page in your browser: https://example.com/login" },
     { "id": 2, "instruction": "Take a screenshot of the empty login form.", "screenshot": true },
     { "id": 3, "instruction": "Enter valid credentials and click 'Sign In'." },
     { "id": 4, "instruction": "Once the dashboard loads, take a screenshot of it.", "screenshot": true },

@@ -48,6 +48,30 @@ body {
 .actions-row {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.editor-page {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.editor-page h1 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+.editor-textarea {
+  flex: 1;
+  width: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d8d8dc;
+  resize: none;
+  margin-bottom: 16px;
 }
 button {
   font-family: inherit;
@@ -126,6 +150,9 @@ button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
   margin-bottom: 8px;
 }
 .step-instruction { font-size: 13px; font-weight: 600; }
+.step-instruction a { color: #0a84ff; }
+.step-card-footer { margin-top: 10px; }
+.step-card-footer button { font-size: 12px; padding: 7px 12px; }
 .step-status { font-size: 12px; white-space: nowrap; }
 .step-status.match { color: #248a3d; }
 .step-status.mismatch { color: #ff453a; }
@@ -248,6 +275,7 @@ button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
   line-height: 1.4;
   min-height: 54px;
 }
+.overlay-instruction a { color: #64b5ff; }
 .overlay-result {
   font-size: 11px;
   border-radius: 6px;

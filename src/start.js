@@ -1,6 +1,8 @@
 const testListEl = document.getElementById('testList');
 const startBtn = document.getElementById('startBtn');
 const resultsBtn = document.getElementById('resultsBtn');
+const editBtn = document.getElementById('editBtn');
+const downloadBtn = document.getElementById('downloadBtn');
 const uploadBtn = document.getElementById('uploadBtn');
 const errorEl = document.getElementById('error');
 
@@ -10,6 +12,13 @@ let selectedFile = null;
 function showError(message) {
   errorEl.textContent = message;
   errorEl.style.display = message ? 'block' : 'none';
+}
+
+function enableSelectionButtons() {
+  startBtn.disabled = false;
+  resultsBtn.disabled = false;
+  editBtn.disabled = false;
+  downloadBtn.disabled = false;
 }
 
 function render() {
@@ -24,8 +33,7 @@ function render() {
     item.innerHTML = `<span class="name">${test.name}</span><span class="meta">${test.stepCount} steps</span>`;
     item.addEventListener('click', () => {
       selectedFile = test.file;
-      startBtn.disabled = false;
-      resultsBtn.disabled = false;
+      enableSelectionButtons();
       render();
     });
     testListEl.appendChild(item);
@@ -44,8 +52,7 @@ uploadBtn.addEventListener('click', async () => {
     if (uploaded) {
       await loadTests();
       selectedFile = uploaded.file;
-      startBtn.disabled = false;
-      resultsBtn.disabled = false;
+      enableSelectionButtons();
       render();
     }
   } catch (err) {
@@ -67,5 +74,22 @@ resultsBtn.addEventListener('click', () => {
   if (!selectedFile) return;
   window.api.openResults(selectedFile);
 });
+
+editBtn.addEventListener('click', () => {
+  if (!selectedFile) return;
+  window.api.openEditor(selectedFile);
+});
+
+downloadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  showError('');
+  try {
+    await window.api.downloadTestPlan(selectedFile);
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+});
+
+window.addEventListener('focus', loadTests);
 
 loadTests();

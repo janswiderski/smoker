@@ -50,7 +50,7 @@ async function showRunList() {
   for (const run of runs) {
     const item = document.createElement('div');
     item.className = 'test-item';
-    const when = new Date(run.finishedAt).toLocaleString();
+    const when = new Date(run.startedAt || run.finishedAt).toLocaleString();
     const badge = run.mismatchCount > 0
       ? `<span class="meta mismatch-count">${run.mismatchCount} mismatch${run.mismatchCount === 1 ? '' : 'es'}</span>`
       : '<span class="meta match-count">all matched</span>';
@@ -80,7 +80,12 @@ async function showRunDetail(runId) {
 
   runListView.style.display = 'none';
   runDetailView.style.display = 'block';
-  runMetaEl.textContent = `Run #${report.runNumber} — finished ${new Date(report.finishedAt).toLocaleString()}`;
+
+  const started = report.startedAt ? new Date(report.startedAt).toLocaleString() : null;
+  const finished = new Date(report.finishedAt).toLocaleString();
+  runMetaEl.textContent = started
+    ? `Run #${report.runNumber} — started ${started}, finished ${finished}`
+    : `Run #${report.runNumber} — finished ${finished}`;
 
   const runLabel = `Run #${report.runNumber}`;
   stepListEl.innerHTML = '';
@@ -99,12 +104,17 @@ async function showRunDetail(runId) {
       imagesHtml += `<div class="step-image"><span>Diff</span><img src="${r.diffUrl}" data-step-id="${r.stepId}" /></div>`;
     }
 
+    const collageBtnHtml = r.screenshotUrl
+      ? `<button class="secondary download-collage-btn" data-step-id="${r.stepId}">Download Collage</button>`
+      : '';
+
     card.innerHTML = `
       <div class="step-card-header">
-        <span class="step-instruction">${r.instruction}</span>
+        <span class="step-instruction">${linkify(r.instruction)}</span>
         <span class="step-status ${r.status}">${statusLabel(r)}</span>
       </div>
       <div class="step-images">${imagesHtml}</div>
+      ${collageBtnHtml ? `<div class="step-card-footer">${collageBtnHtml}</div>` : ''}
     `;
     stepListEl.appendChild(card);
   }
@@ -114,6 +124,22 @@ async function showRunDetail(runId) {
       const stepId = Number(img.dataset.stepId);
       const index = shotsWithImages.findIndex((r) => r.stepId === stepId);
       if (index >= 0) openLightbox(index);
+    });
+  });
+
+  stepListEl.querySelectorAll('.download-collage-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const stepId = Number(btn.dataset.stepId);
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Building…';
+      try {
+        const res = await window.api.downloadCollage(currentFileName, currentRunId, stepId);
+        btn.textContent = res.saved ? 'Saved ✓' : originalText;
+      } finally {
+        btn.disabled = false;
+        setTimeout(() => { btn.textContent = originalText; }, 1500);
+      }
     });
   });
 }

@@ -2,8 +2,11 @@ const testNameEl = document.getElementById('testName');
 const stepCountEl = document.getElementById('stepCount');
 const instructionEl = document.getElementById('instruction');
 const resultEl = document.getElementById('result');
-const screenshotBtn = document.getElementById('screenshotBtn');
+const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
+const screenshotRow = document.getElementById('screenshotRow');
+const viewBaselineBtn = document.getElementById('viewBaselineBtn');
+const screenshotBtn = document.getElementById('screenshotBtn');
 const endBtn = document.getElementById('endBtn');
 
 function renderResult(result) {
@@ -25,12 +28,19 @@ function renderResult(result) {
 window.api.onStepUpdate((data) => {
   testNameEl.textContent = data.testName;
   stepCountEl.textContent = `Step ${data.stepNumber} / ${data.totalSteps}`;
-  instructionEl.textContent = data.instruction;
-  renderResult(data.lastResult);
+  instructionEl.innerHTML = linkify(data.instruction);
+  renderResult(data.stepResult);
+
+  prevBtn.disabled = data.isFirst;
   nextBtn.textContent = data.isLast ? 'Last Step' : 'Next Step';
   nextBtn.disabled = data.isLast;
-  screenshotBtn.style.display = data.requiresScreenshot ? 'block' : 'none';
+
+  screenshotRow.style.display = data.requiresScreenshot ? 'flex' : 'none';
+  screenshotBtn.textContent = data.stepResult ? 'Retake Screenshot' : 'Take Screenshot';
 });
+
+prevBtn.addEventListener('click', () => window.api.prevStep());
+nextBtn.addEventListener('click', () => window.api.nextStep());
 
 screenshotBtn.addEventListener('click', async () => {
   screenshotBtn.disabled = true;
@@ -39,10 +49,14 @@ screenshotBtn.addEventListener('click', async () => {
     await window.api.takeScreenshot();
   } finally {
     screenshotBtn.disabled = false;
-    screenshotBtn.textContent = 'Take Screenshot';
   }
 });
 
-nextBtn.addEventListener('click', () => window.api.nextStep());
+viewBaselineBtn.addEventListener('click', async () => {
+  const result = await window.api.viewBaseline();
+  if (!result.exists) {
+    alert('No baseline saved yet for this step — take a screenshot first to create one.');
+  }
+});
 
 endBtn.addEventListener('click', () => window.api.endRun());

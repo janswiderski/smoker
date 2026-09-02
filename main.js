@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, screen, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -29,6 +29,7 @@ function slugify(name) {
 let startWindow = null;
 let overlayWindow = null;
 let resultsWindow = null;
+let editorWindow = null;
 let currentRun = null;
 
 function readTest(fileName) {
@@ -50,8 +51,8 @@ function toFileUrl(filePath) {
 
 function createStartWindow() {
   startWindow = new BrowserWindow({
-    width: 560,
-    height: 640,
+    width: 640,
+    height: 660,
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -66,7 +67,7 @@ function createOverlayWindow() {
   const { width } = primary.workAreaSize;
   overlayWindow = new BrowserWindow({
     width: 420,
-    height: 240,
+    height: 330,
     x: width - 440,
     y: 20,
     frame: false,
@@ -97,9 +98,10 @@ function sendStepUpdate() {
     stepNumber: currentRun.stepIndex + 1,
     totalSteps: currentRun.steps.length,
     instruction: step.instruction,
+    isFirst: currentRun.stepIndex === 0,
     isLast: currentRun.stepIndex === currentRun.steps.length - 1,
     requiresScreenshot: !!step.screenshot,
-    lastResult: currentRun.results[currentRun.results.length - 1] || null,
+    stepResult: currentRun.results[step.id] || null,
   });
 }
 
@@ -122,6 +124,26 @@ function createResultsWindow(fileName) {
   });
 }
 
+function createEditorWindow(fileName) {
+  editorWindow = new BrowserWindow({
+    width: 640,
+    height: 660,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+    },
+  });
+  editorWindow.loadFile(path.join(__dirname, 'src', 'editor.html'));
+  editorWindow.webContents.once('did-finish-load', () => {
+    const json = readTest(fileName);
+    const content = fs.readFileSync(path.join(smokeTestsDir, fileName), 'utf-8');
+    editorWindow.webContents.send('editor-init', { fileName, testName: json.name, content });
+  });
+  editorWindow.on('closed', () => {
+    editorWindow = null;
+  });
+}
+
 async function captureScreen() {
   const wasVisible = overlayWindow.isVisible();
   overlayWindow.hide();
@@ -138,6 +160,62 @@ async function captureScreen() {
   const png = source.thumbnail.toPNG();
   if (wasVisible) overlayWindow.show();
   return png;
+}
+
+async function buildCollage(entries) {
+  const OUT_WIDTH = 900;
+  const LABEL_HEIGHT = 34;
+  const GAP = 18;
+  const PADDING = 20;
+
+  const rows = entries.map((entry) => {
+    const { width, height } = nativeImage.createFromPath(entry.filePath).getSize();
+    const scaledHeight = Math.round((height / width) * OUT_WIDTH);
+    return { ...entry, scaledHeight };
+  });
+
+  const totalHeight =
+    rows.reduce((sum, r) => sum + LABEL_HEIGHT + r.scaledHeight + GAP, 0) - GAP + PADDING * 2;
+  const totalWidth = OUT_WIDTH + PADDING * 2;
+
+  const rowsHtml = rows
+    .map(
+      (r) => `
+      <div class="row">
+        <div class="label" style="background:${r.color}">${r.label}</div>
+        <img src="${pathToFileURL(r.filePath).href}" width="${OUT_WIDTH}" />
+      </div>`
+    )
+    .join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: ${PADDING}px; }
+    .row { margin-bottom: ${GAP}px; }
+    .row:last-child { margin-bottom: 0; }
+    .label { color: white; font-size: 14px; font-weight: 600; padding: 8px 12px; }
+    img { display: block; width: ${OUT_WIDTH}px; border: 1px solid #d8d8dc; border-top: none; }
+  </style></head><body>${rowsHtml}</body></html>`;
+
+  const tempHtmlPath = path.join(app.getPath('temp'), `smoker-collage-${Date.now()}.html`);
+  fs.writeFileSync(tempHtmlPath, html);
+
+  const collageWindow = new BrowserWindow({
+    width: totalWidth,
+    height: totalHeight,
+    show: false,
+    useContentSize: true,
+    webPreferences: { offscreen: false },
+  });
+
+  try {
+    await collageWindow.loadFile(tempHtmlPath);
+    const image = await collageWindow.webContents.capturePage();
+    return image.toPNG();
+  } finally {
+    collageWindow.destroy();
+    fs.rmSync(tempHtmlPath, { force: true });
+  }
 }
 
 ipcMain.handle('list-smoke-tests', () => {
@@ -167,8 +245,42 @@ ipcMain.handle('upload-smoke-test', async () => {
   return { file: destName, name: json.name, stepCount: json.steps.length };
 });
 
+ipcMain.handle('open-editor', (_event, fileName) => {
+  createEditorWindow(fileName);
+});
+
+ipcMain.handle('save-test-content', (_event, { fileName, content }) => {
+  const json = JSON.parse(content);
+  if (!json.name || !Array.isArray(json.steps) || json.steps.length === 0) {
+    throw new Error('Invalid smoke test: expected { "name": string, "steps": [...] }');
+  }
+  fs.writeFileSync(path.join(smokeTestsDir, fileName), content);
+});
+
+ipcMain.handle('download-test-plan', async (_event, fileName) => {
+  const content = fs.readFileSync(path.join(smokeTestsDir, fileName), 'utf-8');
+  const result = await dialog.showSaveDialog(startWindow, {
+    defaultPath: fileName,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+  fs.writeFileSync(result.filePath, content);
+  return { saved: true };
+});
+
+ipcMain.handle('download-test-content', async (_event, { fileName, content }) => {
+  JSON.parse(content);
+  const result = await dialog.showSaveDialog(editorWindow, {
+    defaultPath: fileName,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+  fs.writeFileSync(result.filePath, content);
+  return { saved: true };
+});
+
 ipcMain.handle('start-run', (_event, fileName) => {
-  const json = JSON.parse(fs.readFileSync(path.join(smokeTestsDir, fileName), 'utf-8'));
+  const json = readTest(fileName);
   const testSlug = slugify(json.name);
   const runId = new Date().toISOString().replace(/[:.]/g, '-');
   const runDir = path.join(dataDir, testSlug, 'runs', runId);
@@ -182,9 +294,10 @@ ipcMain.handle('start-run', (_event, fileName) => {
     steps: json.steps,
     stepIndex: 0,
     runId,
+    startedAt: new Date().toISOString(),
     runDir,
     baselineDir,
-    results: [],
+    results: {},
   };
 
   createOverlayWindow();
@@ -216,9 +329,27 @@ ipcMain.handle('take-screenshot', async () => {
   }
 
   const result = { stepId: step.id, instruction: step.instruction, screenshotPath: shotPath, ...comparison };
-  currentRun.results.push(result);
+  currentRun.results[step.id] = result;
   sendStepUpdate();
   return result;
+});
+
+ipcMain.handle('view-baseline', () => {
+  if (!currentRun) return { exists: false };
+  const step = currentRun.steps[currentRun.stepIndex];
+  const baselinePath = path.join(currentRun.baselineDir, `step-${step.id}.png`);
+  if (!fs.existsSync(baselinePath)) return { exists: false };
+  shell.openPath(baselinePath);
+  return { exists: true };
+});
+
+ipcMain.handle('prev-step', () => {
+  if (!currentRun) return null;
+  if (currentRun.stepIndex > 0) {
+    currentRun.stepIndex -= 1;
+    sendStepUpdate();
+  }
+  return { stepIndex: currentRun.stepIndex };
 });
 
 ipcMain.handle('next-step', () => {
@@ -227,16 +358,21 @@ ipcMain.handle('next-step', () => {
     currentRun.stepIndex += 1;
     sendStepUpdate();
   }
+  if (overlayWindow) overlayWindow.blur();
   return { stepIndex: currentRun.stepIndex, isLast: currentRun.stepIndex === currentRun.steps.length - 1 };
 });
 
 ipcMain.handle('end-run', () => {
   if (!currentRun) return null;
+  const results = currentRun.steps
+    .filter((step) => currentRun.results[step.id])
+    .map((step) => currentRun.results[step.id]);
   const report = {
     testName: currentRun.testName,
     runId: currentRun.runId,
+    startedAt: currentRun.startedAt,
     finishedAt: new Date().toISOString(),
-    results: currentRun.results,
+    results,
   };
   fs.writeFileSync(path.join(currentRun.runDir, 'report.json'), JSON.stringify(report, null, 2));
   const runDir = currentRun.runDir;
@@ -258,6 +394,10 @@ ipcMain.handle('open-path', (_event, filePath) => {
   shell.openPath(filePath);
 });
 
+ipcMain.handle('open-external', (_event, url) => {
+  shell.openExternal(url);
+});
+
 ipcMain.handle('open-results', (_event, fileName) => {
   createResultsWindow(fileName);
 });
@@ -276,6 +416,7 @@ ipcMain.handle('list-runs', (_event, fileName) => {
       return {
         runId,
         runNumber: idx + 1,
+        startedAt: report.startedAt || null,
         finishedAt: report.finishedAt,
         stepCount: report.results.length,
         mismatchCount: report.results.filter((r) => r.status === 'mismatch').length,
@@ -329,6 +470,34 @@ ipcMain.handle('set-run-as-baseline', (_event, { fileName, runId }) => {
       fs.copyFileSync(r.screenshotPath, path.join(baselineDir, `step-${r.stepId}.png`));
     }
   }
+});
+
+ipcMain.handle('download-collage', async (_event, { fileName, runId, stepId }) => {
+  const json = readTest(fileName);
+  const testSlug = slugify(json.name);
+  const runsDir = path.join(dataDir, testSlug, 'runs');
+  const runDir = path.join(runsDir, runId);
+  const baselinePath = path.join(dataDir, testSlug, 'baseline', `step-${stepId}.png`);
+  const screenshotPath = path.join(runDir, `step-${stepId}.png`);
+  const diffPath = path.join(runDir, `step-${stepId}-diff.png`);
+  const runNumber = getRunIdsAscending(runsDir).indexOf(runId) + 1;
+
+  const entries = [];
+  if (fs.existsSync(baselinePath)) entries.push({ label: 'Baseline', color: '#0a84ff', filePath: baselinePath });
+  if (fs.existsSync(screenshotPath)) entries.push({ label: `Run #${runNumber} (Test Run)`, color: '#3a3a3c', filePath: screenshotPath });
+  if (fs.existsSync(diffPath)) entries.push({ label: 'Diff', color: '#ff453a', filePath: diffPath });
+  if (entries.length === 0) return { saved: false };
+
+  const pngBuffer = await buildCollage(entries);
+
+  const result = await dialog.showSaveDialog(resultsWindow, {
+    defaultPath: `${testSlug}-run${runNumber}-step${stepId}-collage.png`,
+    filters: [{ name: 'PNG Image', extensions: ['png'] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+
+  fs.writeFileSync(result.filePath, pngBuffer);
+  return { saved: true, filePath: result.filePath };
 });
 
 app.whenReady().then(() => {
