@@ -6,7 +6,7 @@ const { compareImages } = require('./lib/diff');
 
 app.setName('Smoker');
 
-const MISMATCH_THRESHOLD_PERCENT = 0.1;
+const DEFAULT_MISMATCH_THRESHOLD_PERCENT = 0.1;
 
 const userDataDir = app.getPath('userData');
 const smokeTestsDir = path.join(userDataDir, 'smoke-tests');
@@ -26,8 +26,8 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-const OVERLAY_WIDTH = 640;
-const OVERLAY_HEIGHT = 190;
+const OVERLAY_WIDTH = 480;
+const OVERLAY_HEIGHT = 260;
 const OVERLAY_MARGIN = 20;
 
 let startWindow = null;
@@ -267,7 +267,12 @@ ipcMain.handle('list-smoke-tests', () => {
   return files.map((f) => {
     const full = path.join(smokeTestsDir, f);
     const json = JSON.parse(fs.readFileSync(full, 'utf-8'));
-    return { file: f, name: json.name || f, stepCount: (json.steps || []).length };
+    return {
+      file: f,
+      name: json.name || f,
+      stepCount: (json.steps || []).length,
+      mismatchThreshold: typeof json.mismatchThreshold === 'number' ? json.mismatchThreshold : DEFAULT_MISMATCH_THRESHOLD_PERCENT,
+    };
   });
 });
 
@@ -336,6 +341,7 @@ ipcMain.handle('start-run', (_event, fileName) => {
     testSlug,
     testName: json.name,
     steps: json.steps,
+    mismatchThreshold: typeof json.mismatchThreshold === 'number' ? json.mismatchThreshold : DEFAULT_MISMATCH_THRESHOLD_PERCENT,
     stepIndex: 0,
     runId,
     startedAt: new Date().toISOString(),
@@ -366,7 +372,7 @@ ipcMain.handle('take-screenshot', async (_event, delayMs) => {
     const baselineBuffer = fs.readFileSync(baselinePath);
     const diffResult = compareImages(baselineBuffer, buffer, path.join(currentRun.runDir, `step-${step.id}-diff.png`));
     comparison = {
-      status: diffResult.mismatchPercent > MISMATCH_THRESHOLD_PERCENT ? 'mismatch' : 'match',
+      status: diffResult.mismatchPercent > currentRun.mismatchThreshold ? 'mismatch' : 'match',
       mismatchPercent: diffResult.mismatchPercent,
       diffPath: diffResult.diffPath,
       dimensionsChanged: diffResult.dimensionsChanged,

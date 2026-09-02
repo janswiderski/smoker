@@ -51,9 +51,14 @@ async function showRunList() {
     const item = document.createElement('div');
     item.className = 'test-item';
     const when = new Date(run.startedAt || run.finishedAt).toLocaleString();
-    const badge = run.mismatchCount > 0
-      ? `<span class="meta mismatch-count">${run.mismatchCount} mismatch${run.mismatchCount === 1 ? '' : 'es'}</span>`
-      : '<span class="meta match-count">all matched</span>';
+    let badge;
+    if (run.stepCount === 0) {
+      badge = '<span class="meta">no screenshots taken</span>';
+    } else if (run.mismatchCount > 0) {
+      badge = `<span class="meta mismatch-count">${run.mismatchCount} mismatch${run.mismatchCount === 1 ? '' : 'es'}</span>`;
+    } else {
+      badge = '<span class="meta match-count">all matched</span>';
+    }
     item.innerHTML = `
       <span class="name">Run #${run.runNumber} — ${when}</span>
       <span class="run-row-right">
@@ -89,6 +94,11 @@ async function showRunDetail(runId) {
 
   const runLabel = `Run #${report.runNumber}`;
   stepListEl.innerHTML = '';
+
+  if (report.results.length === 0) {
+    stepListEl.innerHTML = '<div class="empty-state">This run was saved, but no screenshots were taken before it ended.</div>';
+  }
+
   for (const r of report.results) {
     const card = document.createElement('div');
     card.className = `step-card ${r.status}`;

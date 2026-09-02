@@ -7,21 +7,19 @@
 </head>
 <body>
   <div class="overlay-panel">
-    <div class="overlay-left">
-      <div class="overlay-header">
-        <span class="test-name" id="testName"></span>
-        <span class="step-count" id="stepCount"></span>
-      </div>
-      <div class="overlay-instruction" id="instruction"></div>
-      <div id="result" class="overlay-result" style="display:none;"></div>
+    <div class="overlay-header">
+      <span class="test-name" id="testName"></span>
+      <span class="step-count" id="stepCount"></span>
     </div>
-    <div class="overlay-right">
+    <div class="overlay-instruction" id="instruction"></div>
+    <div id="result" class="overlay-result" style="display:none;"></div>
+    <div class="overlay-buttons-grid">
       <button id="prevBtn" class="secondary">‹ Prev</button>
       <button id="nextBtn" class="primary">Next Step</button>
+      <button id="endBtn" class="danger">End Run</button>
       <button id="viewBaselineBtn" class="secondary">View Baseline</button>
       <button id="screenshotBtn" class="secondary">Take Screenshot</button>
-      <button id="delayedScreenshotBtn" class="secondary span-2">Take Screenshot (2s Delay)</button>
-      <button id="endBtn" class="danger span-2">End Run</button>
+      <button id="delayedScreenshotBtn" class="secondary">Take Screenshot (2s Delay)</button>
     </div>
   </div>
   <script src="linkify.js"></script>

@@ -61,6 +61,21 @@ body {
   font-size: 18px;
   margin: 0 0 12px;
 }
+.threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.threshold-row input {
+  width: 90px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d8d8dc;
+  font-family: inherit;
+  font-size: 13px;
+}
 .editor-textarea {
   flex: 1;
   width: 100%;
@@ -253,16 +268,9 @@ button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
   border-radius: 14px;
   padding: 14px 16px;
   display: flex;
-  flex-direction: row;
-  gap: 14px;
-  -webkit-app-region: drag;
-}
-.overlay-left {
-  flex: 1;
-  min-width: 0;
-  display: flex;
   flex-direction: column;
   gap: 8px;
+  -webkit-app-region: drag;
 }
 .overlay-header {
   display: flex;
@@ -296,25 +304,20 @@ button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
 .overlay-result.mismatch { background: rgba(255, 69, 58, 0.2); color: #ff453a; }
 .overlay-result.baseline-created { background: rgba(10, 132, 255, 0.2); color: #64b5ff; }
 
-.overlay-right {
+.overlay-buttons-grid {
   flex-shrink: 0;
-  width: 230px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   grid-auto-rows: min-content;
   gap: 6px;
-  align-content: start;
   -webkit-app-region: no-drag;
 }
-.overlay-right button {
-  padding: 8px 6px;
-  font-size: 11px;
+.overlay-buttons-grid button {
+  padding: 9px 6px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.overlay-right button.span-2 {
-  grid-column: span 2;
 }
 button.danger { background: #ff453a; color: white; }
 

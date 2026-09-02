@@ -30,7 +30,7 @@ function render() {
   for (const test of tests) {
     const item = document.createElement('div');
     item.className = 'test-item' + (test.file === selectedFile ? ' selected' : '');
-    item.innerHTML = `<span class="name">${test.name}</span><span class="meta">${test.stepCount} steps</span>`;
+    item.innerHTML = `<span class="name">${test.name}</span><span class="meta">${test.stepCount} steps · ${test.mismatchThreshold}% threshold</span>`;
     item.addEventListener('click', () => {
       selectedFile = test.file;
       enableSelectionButtons();
