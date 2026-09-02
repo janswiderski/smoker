@@ -4,12 +4,12 @@ const instructionEl = document.getElementById('instruction');
 const resultEl = document.getElementById('result');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
-const screenshotRow = document.getElementById('screenshotRow');
 const viewBaselineBtn = document.getElementById('viewBaselineBtn');
 const screenshotBtn = document.getElementById('screenshotBtn');
-const delayedScreenshotRow = document.getElementById('delayedScreenshotRow');
 const delayedScreenshotBtn = document.getElementById('delayedScreenshotBtn');
 const endBtn = document.getElementById('endBtn');
+
+const screenshotOnlyButtons = [viewBaselineBtn, screenshotBtn, delayedScreenshotBtn];
 
 const CAPTURE_DELAY_MS = 2000;
 
@@ -39,8 +39,9 @@ window.api.onStepUpdate((data) => {
   nextBtn.textContent = data.isLast ? 'Last Step' : 'Next Step';
   nextBtn.disabled = data.isLast;
 
-  screenshotRow.style.display = data.requiresScreenshot ? 'flex' : 'none';
-  delayedScreenshotRow.style.display = data.requiresScreenshot ? 'flex' : 'none';
+  screenshotOnlyButtons.forEach((btn) => {
+    btn.style.display = data.requiresScreenshot ? '' : 'none';
+  });
   const verb = data.stepResult ? 'Retake' : 'Take';
   screenshotBtn.textContent = `${verb} Screenshot`;
   delayedScreenshotBtn.textContent = `${verb} Screenshot (2s Delay)`;

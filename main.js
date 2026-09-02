@@ -26,10 +26,15 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
+const OVERLAY_WIDTH = 640;
+const OVERLAY_HEIGHT = 190;
+const OVERLAY_MARGIN = 20;
+
 let startWindow = null;
 let overlayWindow = null;
 let resultsWindow = null;
 let editorWindow = null;
+let baselinePreviewWindow = null;
 let currentRun = null;
 
 function readTest(fileName) {
@@ -64,12 +69,12 @@ function createStartWindow() {
 
 function createOverlayWindow() {
   const primary = screen.getPrimaryDisplay();
-  const { width } = primary.workAreaSize;
+  const { height: workHeight } = primary.workAreaSize;
   overlayWindow = new BrowserWindow({
-    width: 420,
-    height: 370,
-    x: width - 440,
-    y: 20,
+    width: OVERLAY_WIDTH,
+    height: OVERLAY_HEIGHT,
+    x: OVERLAY_MARGIN,
+    y: workHeight - OVERLAY_HEIGHT - OVERLAY_MARGIN,
     frame: false,
     alwaysOnTop: true,
     resizable: false,
@@ -141,6 +146,40 @@ function createEditorWindow(fileName) {
   });
   editorWindow.on('closed', () => {
     editorWindow = null;
+  });
+}
+
+function createBaselinePreviewWindow(imagePath) {
+  if (baselinePreviewWindow) {
+    baselinePreviewWindow.close();
+  }
+
+  const { width: imgWidth, height: imgHeight } = nativeImage.createFromPath(imagePath).getSize();
+  const primary = screen.getPrimaryDisplay();
+  const maxWidth = Math.round(primary.workAreaSize.width * 0.85);
+  const maxHeight = Math.round(primary.workAreaSize.height * 0.85);
+  const scale = Math.min(1, maxWidth / imgWidth, maxHeight / imgHeight);
+  const winWidth = Math.max(320, Math.round(imgWidth * scale) + 40);
+  const winHeight = Math.max(240, Math.round(imgHeight * scale) + 90);
+
+  baselinePreviewWindow = new BrowserWindow({
+    width: winWidth,
+    height: winHeight,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+    },
+  });
+  baselinePreviewWindow.setAlwaysOnTop(true, 'screen-saver');
+  baselinePreviewWindow.loadFile(path.join(__dirname, 'src', 'baseline-preview.html'));
+  baselinePreviewWindow.webContents.once('did-finish-load', () => {
+    baselinePreviewWindow.webContents.send('baseline-preview-init', { imageUrl: toFileUrl(imagePath) });
+  });
+  baselinePreviewWindow.on('closed', () => {
+    baselinePreviewWindow = null;
   });
 }
 
@@ -345,7 +384,7 @@ ipcMain.handle('view-baseline', () => {
   const step = currentRun.steps[currentRun.stepIndex];
   const baselinePath = path.join(currentRun.baselineDir, `step-${step.id}.png`);
   if (!fs.existsSync(baselinePath)) return { exists: false };
-  shell.openPath(baselinePath);
+  createBaselinePreviewWindow(baselinePath);
   return { exists: true };
 });
 

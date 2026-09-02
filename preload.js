@@ -25,4 +25,5 @@ contextBridge.exposeInMainWorld('api', {
   onStepUpdate: (callback) => ipcRenderer.on('step-update', (_event, data) => callback(data)),
   onResultsInit: (callback) => ipcRenderer.on('results-init', (_event, data) => callback(data)),
   onEditorInit: (callback) => ipcRenderer.on('editor-init', (_event, data) => callback(data)),
+  onBaselinePreviewInit: (callback) => ipcRenderer.on('baseline-preview-init', (_event, data) => callback(data)),
 });
