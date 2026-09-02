@@ -83,8 +83,8 @@ function toFileUrl(filePath) {
 
 function createStartWindow() {
   startWindow = new BrowserWindow({
-    width: 760,
-    height: 800,
+    width: 820,
+    height: 880,
     minWidth: 480,
     minHeight: 520,
     resizable: true,
@@ -321,6 +321,57 @@ ipcMain.handle('create-project', (_event, name) => {
   projects.push(project);
   writeProjects(projects);
   return project;
+});
+
+ipcMain.handle('rename-project', (_event, { id, name }) => {
+  const projects = readProjects();
+  const project = projects.find((p) => p.id === id);
+  if (!project) throw new Error('Project not found.');
+  project.name = name;
+  writeProjects(projects);
+  return project;
+});
+
+ipcMain.handle('delete-project', (_event, id) => {
+  const projects = readProjects();
+  const remaining = projects.filter((p) => p.id !== id);
+  writeProjects(remaining);
+
+  for (const fileName of fs.readdirSync(smokeTestsDir)) {
+    if (fileName === 'projects.json' || !fileName.endsWith('.json')) continue;
+    const filePath = path.join(smokeTestsDir, fileName);
+    const json = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (json.projectId === id) {
+      const testSlug = slugify(json.name);
+      fs.rmSync(filePath, { force: true });
+      fs.rmSync(path.join(dataDir, testSlug), { recursive: true, force: true });
+    }
+  }
+});
+
+ipcMain.handle('choose-add-test-plan-mode', async () => {
+  const choice = await dialog.showMessageBox(startWindow, {
+    type: 'question',
+    buttons: ['Create Blank', 'Import JSON File…', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    message: 'Add a test plan',
+    detail: 'Start from a blank plan, or import an existing JSON checklist.',
+  });
+  if (choice.response === 0) return 'blank';
+  if (choice.response === 1) return 'import';
+  return null;
+});
+
+ipcMain.handle('create-blank-test-plan', (_event, { name, projectId }) => {
+  const json = {
+    name,
+    projectId,
+    steps: [{ id: 1, instruction: 'Describe the first step of this test.' }],
+  };
+  const destName = `${slugify(name)}.json`;
+  fs.writeFileSync(path.join(smokeTestsDir, destName), JSON.stringify(json, null, 2));
+  return { file: destName, name, projectId, stepCount: json.steps.length };
 });
 
 ipcMain.handle('upload-smoke-test', async (_event, projectId) => {

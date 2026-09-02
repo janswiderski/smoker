@@ -1,14 +1,5 @@
 const errorEl = document.getElementById('error');
-
-const projectsView = document.getElementById('projectsView');
 const projectListEl = document.getElementById('projectList');
-
-const shelfView = document.getElementById('shelfView');
-const shelfProjectNameEl = document.getElementById('shelfProjectName');
-const backToProjectsBtn = document.getElementById('backToProjectsBtn');
-const packRowEl = document.getElementById('packRow');
-const packPrevBtn = document.getElementById('packPrevBtn');
-const packNextBtn = document.getElementById('packNextBtn');
 
 const actionOverlay = document.getElementById('actionOverlay');
 const actionPlanNameEl = document.getElementById('actionPlanName');
@@ -20,8 +11,9 @@ const actionDeleteBtn = document.getElementById('actionDeleteBtn');
 const actionBackBtn = document.getElementById('actionBackBtn');
 
 const PACK_COLORS = ['#2f6fed', '#e0393e', '#2fae5c', '#a04fd6', '#e08a1e', '#1eb8b0', '#d6417a'];
+const CHEVRON_SCROLL_AMOUNT = 280;
 
-let currentProject = null;
+let openUnitEl = null;
 let selectedTestFile = null;
 
 function showError(message) {
@@ -29,34 +21,18 @@ function showError(message) {
   errorEl.style.display = message ? 'block' : 'none';
 }
 
-function playOpenAnimation(el) {
-  return new Promise((resolve) => {
-    el.classList.add('opening');
-    setTimeout(resolve, 320);
-  });
-}
-
-function enterView(el, displayValue) {
-  el.style.display = displayValue;
-  el.classList.add('enter');
-  void el.offsetWidth;
-  el.classList.remove('enter');
-}
-
 async function loadProjects() {
-  const projects = await window.api.listProjects();
-  renderProjects(projects);
+  const [projects, tests] = await Promise.all([window.api.listProjects(), window.api.listSmokeTests()]);
+  renderProjects(projects, tests);
 }
 
-function renderProjects(projects) {
+function renderProjects(projects, tests) {
   projectListEl.innerHTML = '';
+  openUnitEl = null;
 
   projects.forEach((project) => {
-    const cover = document.createElement('div');
-    cover.className = 'shelf-cover';
-    cover.textContent = project.name;
-    cover.addEventListener('click', () => openProject(project, cover));
-    projectListEl.appendChild(cover);
+    const projectTests = tests.filter((t) => t.projectId === project.id);
+    projectListEl.appendChild(buildShelfUnit(project, projectTests));
   });
 
   const addCover = document.createElement('div');
@@ -64,6 +40,111 @@ function renderProjects(projects) {
   addCover.textContent = '+ Add New Project';
   addCover.addEventListener('click', createProjectFlow);
   projectListEl.appendChild(addCover);
+}
+
+function buildShelfUnit(project, tests) {
+  const unit = document.createElement('div');
+  unit.className = 'shelf-unit';
+  unit.dataset.projectId = project.id;
+
+  const packArea = document.createElement('div');
+  packArea.className = 'shelf-pack-area';
+
+  const prevBtn = document.createElement('button');
+  prevBtn.className = 'chevron-btn chevron-prev';
+  prevBtn.textContent = '‹';
+  prevBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    packRow.scrollBy({ left: -CHEVRON_SCROLL_AMOUNT, behavior: 'smooth' });
+  });
+
+  const packRow = document.createElement('div');
+  packRow.className = 'pack-row';
+
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'chevron-btn chevron-next';
+  nextBtn.textContent = '›';
+  nextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    packRow.scrollBy({ left: CHEVRON_SCROLL_AMOUNT, behavior: 'smooth' });
+  });
+
+  packArea.append(prevBtn, packRow, nextBtn);
+  renderPacksInto(packRow, tests, project);
+
+  const flap = document.createElement('div');
+  flap.className = 'shelf-cover-flap';
+  flap.innerHTML = `
+    <span class="shelf-cover-name">${project.name}</span>
+    <span class="shelf-cover-actions">
+      <button class="icon-btn rename-btn" title="Rename project">✏️</button>
+      <button class="icon-btn delete-btn" title="Delete project">🗑</button>
+    </span>
+  `;
+  flap.addEventListener('click', () => toggleShelf(unit, packRow, prevBtn, nextBtn));
+  flap.querySelector('.rename-btn').addEventListener('click', (e) => renameProjectFlow(e, project));
+  flap.querySelector('.delete-btn').addEventListener('click', (e) => deleteProjectFlow(e, project));
+
+  unit.append(packArea, flap);
+  updateChevronVisibility(packRow, prevBtn, nextBtn);
+  return unit;
+}
+
+function toggleShelf(unit, packRow, prevBtn, nextBtn) {
+  if (openUnitEl && openUnitEl !== unit) {
+    openUnitEl.classList.remove('open');
+  }
+  const isOpen = unit.classList.toggle('open');
+  openUnitEl = isOpen ? unit : null;
+  if (isOpen) {
+    updateChevronVisibility(packRow, prevBtn, nextBtn);
+  }
+}
+
+function updateChevronVisibility(packRow, prevBtn, nextBtn) {
+  requestAnimationFrame(() => {
+    const overflow = packRow.scrollWidth > packRow.clientWidth + 4;
+    prevBtn.style.visibility = overflow ? 'visible' : 'hidden';
+    nextBtn.style.visibility = overflow ? 'visible' : 'hidden';
+  });
+}
+
+function renderPacksInto(packRow, tests, project) {
+  packRow.innerHTML = '';
+
+  tests.forEach((test, i) => {
+    const pack = document.createElement('div');
+    pack.className = 'pack';
+    pack.style.setProperty('--pack-color', PACK_COLORS[i % PACK_COLORS.length]);
+    pack.innerHTML = `
+      <div class="pack-notch"></div>
+      <div class="pack-body"><span class="pack-name">${test.name}</span></div>
+      <div class="pack-band"></div>
+    `;
+    pack.addEventListener('click', () => openActionPanel(test));
+    packRow.appendChild(pack);
+  });
+
+  const addPack = document.createElement('div');
+  addPack.className = 'pack pack-add';
+  addPack.innerHTML = `
+    <div class="pack-notch add-notch"></div>
+    <div class="pack-body"><span class="pack-name">+ Add Test Plan</span></div>
+    <div class="pack-band add-band"></div>
+  `;
+  addPack.addEventListener('click', () => addTestPlanFlow(project));
+  packRow.appendChild(addPack);
+}
+
+async function refreshShelf(project) {
+  const tests = await window.api.listSmokeTests();
+  const unit = projectListEl.querySelector(`.shelf-unit[data-project-id="${CSS.escape(project.id)}"]`);
+  if (!unit) return;
+  const packRow = unit.querySelector('.pack-row');
+  const prevBtn = unit.querySelector('.chevron-prev');
+  const nextBtn = unit.querySelector('.chevron-next');
+  renderPacksInto(packRow, tests.filter((t) => t.projectId === project.id), project);
+  updateChevronVisibility(packRow, prevBtn, nextBtn);
 }
 
 async function createProjectFlow() {
@@ -78,78 +159,54 @@ async function createProjectFlow() {
   }
 }
 
-async function openProject(project, coverEl) {
-  currentProject = project;
-  await playOpenAnimation(coverEl);
-  coverEl.classList.remove('opening');
-  projectsView.style.display = 'none';
-  await loadShelf(project);
-  enterView(shelfView, 'flex');
-}
-
-async function loadShelf(project) {
-  shelfProjectNameEl.textContent = project.name;
-  const tests = await window.api.listSmokeTests();
-  renderPackRow(tests.filter((t) => t.projectId === project.id));
-}
-
-function renderPackRow(tests) {
-  packRowEl.innerHTML = '';
-
-  tests.forEach((test, i) => {
-    const pack = document.createElement('div');
-    pack.className = 'pack';
-    pack.style.setProperty('--pack-color', PACK_COLORS[i % PACK_COLORS.length]);
-    pack.innerHTML = `
-      <div class="pack-notch"></div>
-      <div class="pack-body"><span class="pack-name">${test.name}</span></div>
-      <div class="pack-band"></div>
-    `;
-    pack.addEventListener('click', () => openActionPanel(test));
-    packRowEl.appendChild(pack);
-  });
-
-  const addPack = document.createElement('div');
-  addPack.className = 'pack pack-add';
-  addPack.innerHTML = `
-    <div class="pack-notch add-notch"></div>
-    <div class="pack-body"><span class="pack-name">+ Add Test Plan</span></div>
-    <div class="pack-band add-band"></div>
-  `;
-  addPack.addEventListener('click', addTestPlanFlow);
-  packRowEl.appendChild(addPack);
-
-  updateChevronVisibility();
-}
-
-function updateChevronVisibility() {
-  requestAnimationFrame(() => {
-    const overflow = packRowEl.scrollWidth > packRowEl.clientWidth + 4;
-    packPrevBtn.style.visibility = overflow ? 'visible' : 'hidden';
-    packNextBtn.style.visibility = overflow ? 'visible' : 'hidden';
-  });
-}
-
-packPrevBtn.addEventListener('click', () => packRowEl.scrollBy({ left: -280, behavior: 'smooth' }));
-packNextBtn.addEventListener('click', () => packRowEl.scrollBy({ left: 280, behavior: 'smooth' }));
-window.addEventListener('resize', updateChevronVisibility);
-
-async function addTestPlanFlow() {
-  if (!currentProject) return;
+async function renameProjectFlow(e, project) {
+  e.stopPropagation();
+  const newName = window.prompt('Rename project:', project.name);
+  if (!newName || !newName.trim() || newName.trim() === project.name) return;
   showError('');
   try {
-    const uploaded = await window.api.uploadSmokeTest(currentProject.id);
-    if (uploaded) await loadShelf(currentProject);
+    await window.api.renameProject(project.id, newName.trim());
+    await loadProjects();
   } catch (err) {
     showError(err.message || String(err));
   }
 }
 
-backToProjectsBtn.addEventListener('click', () => {
-  shelfView.style.display = 'none';
-  currentProject = null;
-  enterView(projectsView, 'block');
-});
+async function deleteProjectFlow(e, project) {
+  e.stopPropagation();
+  showError('');
+  try {
+    const tests = await window.api.listSmokeTests();
+    const count = tests.filter((t) => t.projectId === project.id).length;
+    const warning = count > 0
+      ? `Delete "${project.name}" and permanently remove its ${count} test plan${count === 1 ? '' : 's'} (including all run history)? This cannot be undone.`
+      : `Delete "${project.name}"? This cannot be undone.`;
+    if (!window.confirm(warning)) return;
+    await window.api.deleteProject(project.id);
+    await loadProjects();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+async function addTestPlanFlow(project) {
+  showError('');
+  try {
+    const mode = await window.api.chooseAddTestPlanMode();
+    if (mode === 'blank') {
+      const name = window.prompt('New test plan name:');
+      if (!name || !name.trim()) return;
+      const created = await window.api.createBlankTestPlan(name.trim(), project.id);
+      await refreshShelf(project);
+      window.api.openEditor(created.file);
+    } else if (mode === 'import') {
+      const uploaded = await window.api.uploadSmokeTest(project.id);
+      if (uploaded) await refreshShelf(project);
+    }
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
 
 function openActionPanel(test) {
   selectedTestFile = test.file;
@@ -199,20 +256,13 @@ actionDownloadBtn.addEventListener('click', async () => {
 });
 
 actionDeleteBtn.addEventListener('click', async () => {
-  if (!selectedTestFile || !currentProject) return;
+  if (!selectedTestFile) return;
   if (!window.confirm(`Delete "${actionPlanNameEl.textContent}" and all of its run history? This cannot be undone.`)) return;
-  const project = currentProject;
   await window.api.deleteSmokeTest(selectedTestFile);
   closeActionPanel();
-  await loadShelf(project);
+  await loadProjects();
 });
 
-window.addEventListener('focus', () => {
-  if (currentProject) {
-    loadShelf(currentProject);
-  } else {
-    loadProjects();
-  }
-});
+window.addEventListener('focus', loadProjects);
 
 loadProjects();
