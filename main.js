@@ -67,7 +67,7 @@ function createOverlayWindow() {
   const { width } = primary.workAreaSize;
   overlayWindow = new BrowserWindow({
     width: 420,
-    height: 330,
+    height: 370,
     x: width - 440,
     y: 20,
     frame: false,
@@ -171,7 +171,8 @@ async function buildCollage(entries) {
   const rows = entries.map((entry) => {
     const { width, height } = nativeImage.createFromPath(entry.filePath).getSize();
     const scaledHeight = Math.round((height / width) * OUT_WIDTH);
-    return { ...entry, scaledHeight };
+    const timestamp = fs.statSync(entry.filePath).mtime.toLocaleString();
+    return { ...entry, scaledHeight, timestamp };
   });
 
   const totalHeight =
@@ -182,7 +183,10 @@ async function buildCollage(entries) {
     .map(
       (r) => `
       <div class="row">
-        <div class="label" style="background:${r.color}">${r.label}</div>
+        <div class="label" style="background:${r.color}">
+          <span class="label-title">${r.label}</span>
+          <span class="label-time">${r.timestamp}</span>
+        </div>
         <img src="${pathToFileURL(r.filePath).href}" width="${OUT_WIDTH}" />
       </div>`
     )
@@ -193,7 +197,8 @@ async function buildCollage(entries) {
     body { background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: ${PADDING}px; }
     .row { margin-bottom: ${GAP}px; }
     .row:last-child { margin-bottom: 0; }
-    .label { color: white; font-size: 14px; font-weight: 600; padding: 8px 12px; }
+    .label { color: white; font-size: 14px; font-weight: 600; padding: 8px 12px; display: flex; justify-content: space-between; align-items: baseline; }
+    .label-time { font-size: 11px; font-weight: 400; opacity: 0.85; }
     img { display: block; width: ${OUT_WIDTH}px; border: 1px solid #d8d8dc; border-top: none; }
   </style></head><body>${rowsHtml}</body></html>`;
 
@@ -305,9 +310,10 @@ ipcMain.handle('start-run', (_event, fileName) => {
   return { totalSteps: json.steps.length };
 });
 
-ipcMain.handle('take-screenshot', async () => {
+ipcMain.handle('take-screenshot', async (_event, delayMs) => {
   if (!currentRun) return null;
   const step = currentRun.steps[currentRun.stepIndex];
+  if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
   const buffer = await captureScreen();
   const shotPath = path.join(currentRun.runDir, `step-${step.id}.png`);
   fs.writeFileSync(shotPath, buffer);

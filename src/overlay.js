@@ -7,7 +7,11 @@ const nextBtn = document.getElementById('nextBtn');
 const screenshotRow = document.getElementById('screenshotRow');
 const viewBaselineBtn = document.getElementById('viewBaselineBtn');
 const screenshotBtn = document.getElementById('screenshotBtn');
+const delayedScreenshotRow = document.getElementById('delayedScreenshotRow');
+const delayedScreenshotBtn = document.getElementById('delayedScreenshotBtn');
 const endBtn = document.getElementById('endBtn');
+
+const CAPTURE_DELAY_MS = 2000;
 
 function renderResult(result) {
   if (!result) {
@@ -36,19 +40,43 @@ window.api.onStepUpdate((data) => {
   nextBtn.disabled = data.isLast;
 
   screenshotRow.style.display = data.requiresScreenshot ? 'flex' : 'none';
-  screenshotBtn.textContent = data.stepResult ? 'Retake Screenshot' : 'Take Screenshot';
+  delayedScreenshotRow.style.display = data.requiresScreenshot ? 'flex' : 'none';
+  const verb = data.stepResult ? 'Retake' : 'Take';
+  screenshotBtn.textContent = `${verb} Screenshot`;
+  delayedScreenshotBtn.textContent = `${verb} Screenshot (2s Delay)`;
 });
 
 prevBtn.addEventListener('click', () => window.api.prevStep());
 nextBtn.addEventListener('click', () => window.api.nextStep());
 
+function setCaptureButtonsDisabled(disabled) {
+  screenshotBtn.disabled = disabled;
+  delayedScreenshotBtn.disabled = disabled;
+}
+
 screenshotBtn.addEventListener('click', async () => {
-  screenshotBtn.disabled = true;
+  setCaptureButtonsDisabled(true);
   screenshotBtn.textContent = 'Capturing…';
   try {
     await window.api.takeScreenshot();
   } finally {
-    screenshotBtn.disabled = false;
+    setCaptureButtonsDisabled(false);
+  }
+});
+
+delayedScreenshotBtn.addEventListener('click', async () => {
+  setCaptureButtonsDisabled(true);
+  let secondsLeft = Math.ceil(CAPTURE_DELAY_MS / 1000);
+  delayedScreenshotBtn.textContent = `Capturing in ${secondsLeft}s…`;
+  const countdown = setInterval(() => {
+    secondsLeft -= 1;
+    delayedScreenshotBtn.textContent = secondsLeft > 0 ? `Capturing in ${secondsLeft}s…` : 'Capturing…';
+  }, 1000);
+  try {
+    await window.api.takeScreenshot(CAPTURE_DELAY_MS);
+  } finally {
+    clearInterval(countdown);
+    setCaptureButtonsDisabled(false);
   }
 });
 

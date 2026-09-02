@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   downloadTestPlan: (fileName) => ipcRenderer.invoke('download-test-plan', fileName),
   downloadTestContent: (fileName, content) => ipcRenderer.invoke('download-test-content', { fileName, content }),
   startRun: (fileName) => ipcRenderer.invoke('start-run', fileName),
-  takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
+  takeScreenshot: (delayMs) => ipcRenderer.invoke('take-screenshot', delayMs),
   viewBaseline: () => ipcRenderer.invoke('view-baseline'),
   prevStep: () => ipcRenderer.invoke('prev-step'),
   nextStep: () => ipcRenderer.invoke('next-step'),
