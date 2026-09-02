@@ -1,0 +1,12 @@
+{
+  "name": "Login Flow",
+  "steps": [
+    { "id": 1, "instruction": "Open the app's login page in your browser." },
+    { "id": 2, "instruction": "Take a screenshot of the empty login form.", "screenshot": true },
+    { "id": 3, "instruction": "Enter valid credentials and click 'Sign In'." },
+    { "id": 4, "instruction": "Once the dashboard loads, take a screenshot of it.", "screenshot": true },
+    { "id": 5, "instruction": "Open the account menu in the top right corner." },
+    { "id": 6, "instruction": "Take a screenshot of the open account menu.", "screenshot": true },
+    { "id": 7, "instruction": "Click 'Log out' and confirm you are returned to the login page." }
+  ]
+}

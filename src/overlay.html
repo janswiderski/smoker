@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Smoke Check — Overlay</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="overlay-panel">
+    <div class="overlay-header">
+      <span class="test-name" id="testName"></span>
+      <span class="step-count" id="stepCount"></span>
+    </div>
+    <div class="overlay-instruction" id="instruction"></div>
+    <div id="result" class="overlay-result" style="display:none;"></div>
+    <div class="overlay-buttons">
+      <button id="screenshotBtn" class="secondary">Take Screenshot</button>
+      <button id="nextBtn" class="primary">Next Step</button>
+      <button id="endBtn" class="danger">End Run</button>
+    </div>
+  </div>
+  <script src="overlay.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "smoke-check-app",
+  "version": "1.0.0",
+  "description": "Overlay app for running manual smoke-test checklists with baseline screenshot diffing",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.0.0"
+  },
+  "dependencies": {
+    "pixelmatch": "^5.3.0",
+    "pngjs": "^7.0.0"
+  }
+}

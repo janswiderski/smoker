@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Smoke Check</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="start-page">
+    <h1>Smoke Check</h1>
+    <p class="subtitle">Choose a smoke test checklist to run, or upload a new one.</p>
+    <div id="error" class="error-banner" style="display:none;"></div>
+    <div id="testList" class="test-list"></div>
+    <div class="actions-row">
+      <button id="uploadBtn" class="secondary">Upload Smoke Test…</button>
+      <button id="resultsBtn" class="secondary" disabled>View Results</button>
+      <button id="startBtn" class="primary" disabled>Start Run</button>
+    </div>
+  </div>
+  <script src="start.js"></script>
+</body>
+</html>

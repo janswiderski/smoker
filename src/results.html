@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Smoke Check — Results</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="results-page">
+    <h1 id="testTitle">Results</h1>
+
+    <div id="runListView">
+      <p class="subtitle">Past runs, most recent first.</p>
+      <div id="runList" class="test-list"></div>
+    </div>
+
+    <div id="runDetailView" style="display:none;">
+      <button id="backBtn" class="secondary back-btn">← Back to runs</button>
+      <p class="subtitle" id="runMeta"></p>
+      <div id="stepList"></div>
+    </div>
+  </div>
+  <script src="results.js"></script>
+</body>
+</html>
