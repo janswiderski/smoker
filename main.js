@@ -89,8 +89,7 @@ function createStartWindow() {
     minHeight: 520,
     resizable: true,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#3a3a3d',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

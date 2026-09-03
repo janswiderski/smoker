@@ -5,8 +5,6 @@ body {
   color: #1c1c1e;
   background: #f5f5f7;
 }
-body.transparent-bg { background: transparent; }
-
 .window-controls {
   position: fixed;
   top: 22px;
@@ -43,6 +41,7 @@ body.transparent-bg { background: transparent; }
 
 .cabinet-page {
   min-height: 100vh;
+  background: #3a3a3d;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -296,9 +295,9 @@ body.transparent-bg { background: transparent; }
   padding: 0;
   z-index: 2;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  align-self: center;
   visibility: hidden;
 }
+.shelf-unit:not(.open) .chevron-btn { visibility: hidden !important; }
 
 .pack-row {
   flex: 1;
@@ -441,6 +440,30 @@ body.transparent-bg { background: transparent; }
   gap: 8px;
 }
 .action-back { margin-top: 4px; }
+
+.prompt-panel {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 24px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+.prompt-panel h3 {
+  margin: 0;
+  font-size: 16px;
+  text-align: center;
+  word-break: break-word;
+}
+.text-prompt-input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #d8d8dc;
+  font-family: inherit;
+  font-size: 14px;
+}
 
 .empty-state {
   padding: 24px;

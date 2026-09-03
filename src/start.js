@@ -10,6 +10,45 @@ const actionDownloadBtn = document.getElementById('actionDownloadBtn');
 const actionDeleteBtn = document.getElementById('actionDeleteBtn');
 const actionBackBtn = document.getElementById('actionBackBtn');
 
+const textPromptOverlay = document.getElementById('textPromptOverlay');
+const textPromptTitle = document.getElementById('textPromptTitle');
+const textPromptInput = document.getElementById('textPromptInput');
+const textPromptOkBtn = document.getElementById('textPromptOkBtn');
+const textPromptCancelBtn = document.getElementById('textPromptCancelBtn');
+let textPromptResolve = null;
+
+function promptForText(title, defaultValue) {
+  return new Promise((resolve) => {
+    textPromptResolve = resolve;
+    textPromptTitle.textContent = title;
+    textPromptInput.value = defaultValue || '';
+    textPromptOverlay.style.display = 'flex';
+    requestAnimationFrame(() => {
+      textPromptInput.focus();
+      textPromptInput.select();
+    });
+  });
+}
+
+function closeTextPrompt(result) {
+  textPromptOverlay.style.display = 'none';
+  if (textPromptResolve) {
+    const resolve = textPromptResolve;
+    textPromptResolve = null;
+    resolve(result);
+  }
+}
+
+textPromptOkBtn.addEventListener('click', () => closeTextPrompt(textPromptInput.value));
+textPromptCancelBtn.addEventListener('click', () => closeTextPrompt(null));
+textPromptInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') closeTextPrompt(textPromptInput.value);
+  if (e.key === 'Escape') closeTextPrompt(null);
+});
+textPromptOverlay.addEventListener('click', (e) => {
+  if (e.target === textPromptOverlay) closeTextPrompt(null);
+});
+
 const PACK_COLORS = ['#2f6fed', '#e0393e', '#2fae5c', '#a04fd6', '#e08a1e', '#1eb8b0', '#d6417a'];
 const CHEVRON_SCROLL_AMOUNT = 280;
 
@@ -196,7 +235,7 @@ async function refreshShelf(project) {
 }
 
 async function createProjectFlow() {
-  const name = window.prompt('New project name:');
+  const name = await promptForText('New project name:');
   if (!name || !name.trim()) return;
   showError('');
   try {
@@ -209,7 +248,7 @@ async function createProjectFlow() {
 
 async function renameProjectFlow(e, project) {
   e.stopPropagation();
-  const newName = window.prompt('Rename project:', project.name);
+  const newName = await promptForText('Rename project:', project.name);
   if (!newName || !newName.trim() || newName.trim() === project.name) return;
   showError('');
   try {
@@ -242,7 +281,7 @@ async function addTestPlanFlow(project) {
   try {
     const mode = await window.api.chooseAddTestPlanMode();
     if (mode === 'blank') {
-      const name = window.prompt('New test plan name:');
+      const name = await promptForText('New test plan name:');
       if (!name || !name.trim()) return;
       const created = await window.api.createBlankTestPlan(name.trim(), project.id);
       await refreshShelf(project);

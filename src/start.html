@@ -5,7 +5,7 @@
   <title>Smoker</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="transparent-bg">
+<body>
   <div class="window-controls">
     <button id="winCloseBtn" class="window-control-btn close" title="Close"></button>
     <button id="winMinimizeBtn" class="window-control-btn minimize" title="Minimize"></button>
@@ -43,6 +43,17 @@
         <button id="actionBackBtn" class="secondary action-back">← Back</button>
       </div>
       <div class="action-panel-band"></div>
+    </div>
+  </div>
+
+  <div id="textPromptOverlay" class="action-overlay" style="display:none;">
+    <div class="prompt-panel">
+      <h3 id="textPromptTitle"></h3>
+      <input type="text" id="textPromptInput" class="text-prompt-input" />
+      <div class="action-buttons">
+        <button id="textPromptOkBtn" class="primary">OK</button>
+        <button id="textPromptCancelBtn" class="secondary">Cancel</button>
+      </div>
     </div>
   </div>
 
