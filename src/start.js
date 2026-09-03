@@ -19,6 +19,20 @@ let selectedTestFile = null;
 document.getElementById('winCloseBtn').addEventListener('click', () => window.api.quitApp());
 document.getElementById('winMinimizeBtn').addEventListener('click', () => window.api.minimizeWindow());
 
+(function splitLogoLetters() {
+  const logoEl = document.querySelector('.cabinet-logo');
+  const text = logoEl.textContent;
+  logoEl.innerHTML = '';
+  for (const ch of text) {
+    const span = document.createElement('span');
+    span.className = 'logo-letter' + (ch === ' ' ? ' space' : '');
+    span.textContent = ch;
+    span.style.animationDelay = `-${(Math.random() * 8).toFixed(2)}s`;
+    span.style.animationDuration = `${(6 + Math.random() * 4).toFixed(2)}s`;
+    logoEl.appendChild(span);
+  }
+})();
+
 function showError(message) {
   errorEl.textContent = message;
   errorEl.style.display = message ? 'block' : 'none';
@@ -77,6 +91,15 @@ function buildShelfUnit(project, tests) {
   packArea.append(prevBtn, packRow, nextBtn);
   renderPacksInto(packRow, tests, project);
 
+  let wheelWobbleLocked = false;
+  packRow.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaX) < 2) return;
+    if (wheelWobbleLocked) return;
+    wheelWobbleLocked = true;
+    wobblePacks(packRow, e.deltaX > 0 ? 'right' : 'left');
+    setTimeout(() => { wheelWobbleLocked = false; }, 250);
+  });
+
   const flap = document.createElement('div');
   flap.className = 'shelf-cover-flap';
   flap.innerHTML = `
@@ -90,7 +113,16 @@ function buildShelfUnit(project, tests) {
   flap.querySelector('.rename-btn').addEventListener('click', (e) => renameProjectFlow(e, project));
   flap.querySelector('.delete-btn').addEventListener('click', (e) => deleteProjectFlow(e, project));
 
-  unit.append(packArea, flap);
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'icon-btn shelf-close-btn';
+  closeBtn.title = 'Close section';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleShelf(unit, packRow, prevBtn, nextBtn);
+  });
+
+  unit.append(packArea, flap, closeBtn);
   updateChevronVisibility(packRow, prevBtn, nextBtn);
   return unit;
 }
