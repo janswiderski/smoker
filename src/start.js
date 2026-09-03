@@ -72,6 +72,15 @@ document.getElementById('winMinimizeBtn').addEventListener('click', () => window
   }
 })();
 
+(function randomizeIconFlicker() {
+  const icon = document.querySelector('.cabinet-logo-icon');
+  if (!icon) return;
+  const flickerDelay = -(Math.random() * 8).toFixed(2);
+  const flickerDuration = (6 + Math.random() * 4).toFixed(2);
+  icon.style.animationDelay = `0s, ${flickerDelay}s`;
+  icon.style.animationDuration = `3.5s, ${flickerDuration}s`;
+})();
+
 function showError(message) {
   errorEl.textContent = message;
   errorEl.style.display = message ? 'block' : 'none';

@@ -114,6 +114,28 @@ body {
   animation: neon-letter-flicker 8s linear infinite;
 }
 .logo-letter.space { width: 0.3em; }
+
+.cabinet-logo-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@keyframes neon-icon-glow-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(89, 232, 22, 0.45)) drop-shadow(0 0 14px rgba(89, 232, 22, 0.25));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(89, 232, 22, 0.7)) drop-shadow(0 0 20px rgba(89, 232, 22, 0.4));
+  }
+}
+.cabinet-logo-icon {
+  height: 36px;
+  width: auto;
+  animation-name: neon-icon-glow-pulse, neon-letter-flicker;
+  animation-duration: 3.5s, 8s;
+  animation-timing-function: ease-in-out, linear;
+  animation-iteration-count: infinite, infinite;
+}
 .cabinet-led {
   position: absolute;
   right: 18px;
