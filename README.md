@@ -1,6 +1,6 @@
 # Smoker
 
-An Electron desktop app for running manual smoke-test checklists. It overlays instructions and a set of action buttons on top of whatever app you're testing, captures screenshots at whichever steps you mark, and automatically diffs each screenshot against a stored baseline (pure pixel comparison via `pixelmatch` — no AI). Test plans are organized into projects, presented as a themed "cigarette vending cabinet" main menu.
+An Electron desktop app for running manual smoke-test checklists. It overlays instructions and a set of action buttons on top of whatever app you're testing, captures screenshots at whichever steps you mark, and automatically diffs each screenshot against a stored baseline (pure pixel comparison via `pixelmatch` — no AI). Test plans are organized into projects, presented as a themed "cigarette vending cabinet" main menu — a real 3D scene (Three.js/WebGL), not a flat mockup.
 
 ## Running it
 
@@ -13,18 +13,19 @@ npm start
 
 ## How it's built
 
-Plain Electron, no framework or bundler:
+Plain Electron, no framework or bundler (Three.js is loaded via a browser import map, no build step):
 - `main.js` — the main process: all file I/O, IPC handlers, and window creation.
 - `preload.js` — the only bridge between main and renderer, exposing a `window.api.*` surface via `contextBridge`.
-- `src/*.html` + `src/*.js` — one pair per window (see below), plain DOM/CSS, no build step.
-- `src/styles.css` — shared stylesheet for every window.
+- `src/cabinet3d.html` + `src/cabinet3d.js` — the main window: a Three.js scene for the cabinet, plus a handful of ordinary DOM overlay elements (action panel, rename/create-project prompt, error banner) layered on top of the canvas for anything that's just text and buttons.
+- `src/*.html` + `src/*.js` (the rest) — one pair per secondary window (see below), plain DOM/CSS, no build step.
+- `src/styles.css` — shared stylesheet for every window, including the DOM overlays inside `cabinet3d.html`.
 - `lib/diff.js` — the `pixelmatch`/`pngjs` wrapper used to compare two screenshots and produce a highlighted diff image.
 
 ### Windows
 
 | Window | Purpose |
 |---|---|
-| **Start window** (`start.html`/`start.js`) | The main menu — the vending-cabinet UI. Always open; the app's "home". |
+| **Start window** (`cabinet3d.html`/`cabinet3d.js`) | The main menu — a real 3D cabinet scene, one shelf per project, cloned/resized to fit however many projects and test plans actually exist. Always open; the app's "home". |
 | **Overlay window** | The floating instructions + action-button panel shown while a test run is in progress. Frameless, always-on-top, transparent background. |
 | **Results window** | Per-test-plan run history, run detail, and the fullscreen baseline/diff comparison lightbox. |
 | **Editor window** | Raw-JSON + diff-threshold editor for a single test plan. |
@@ -70,14 +71,14 @@ On first launch, `smoke-tests/` is seeded from the bundled `smoke-tests/` folder
 ## Workflows
 
 ### Managing projects
-From the main menu (the cabinet): each project is a shelf. Click its cover to swing it open in place (accordion — only one shelf open at a time) and reveal its test plans as "packs." Click the ✕ in the top-right of an open shelf to close it again. Each shelf's cover also has ✏️ (rename) and 🗑 (delete — cascades: removes every test plan in that project along with their run history and baselines, after a confirmation naming the count). "+ Add New Project" at the bottom of the cabinet prompts for a name and creates a new empty project.
+From the main menu (the 3D cabinet, orbit with drag / zoom with scroll): each project is a shelf with a colored cover. Click a cover to swing it open on its hinge (only one shelf open at a time — opening another closes whichever was open) and reveal its test plans as "packs" sitting on the shelf behind. Each row also has a chevron on either side and edit (✏️)/delete (🗑) buttons flanking the cabinet — edit prompts to rename that project, delete removes it and cascades (every test plan in it, plus their run history and baselines, after a confirmation naming the count). A dedicated dark cover at the top of the stack, "+ Add New Project," prompts for a name and creates a new empty project. The cabinet's height and the logo's position both adjust automatically as projects are added or removed.
 
 ### Managing test plans
-Inside an open project shelf, each test plan is a colored pack showing its name. If there are more packs than fit, ‹ › chevrons (or mouse wheel / trackpad horizontal scroll) cycle through them, with a little wobble animation in the scroll direction. The last pack, "+ Add Test Plan," offers a choice:
+Inside an open project shelf, each test plan is a colored pack showing its name. If a project has more test plans than comfortably fit the shelf's width, packs shrink to fit rather than needing to scroll (the side chevrons are present but not yet wired to scrolling — a placeholder for now). The last pack, "+ Add Test Plan," offers a choice:
 - **Create Blank** — prompts for a name, creates a one-step placeholder plan, and opens it directly in the Editor.
 - **Import JSON File…** — the classic file-picker flow; validates the file has `name` + a non-empty `steps` array, then assigns it to the current project.
 
-Clicking any pack flips it open into an action panel (styled and colored like that pack) with:
+Clicking any real pack opens a DOM action panel over the (dimmed) 3D scene, styled and colored like that pack, with:
 - **Start Run** — begins a smoke-test run (opens the Overlay window).
 - **View Test Runs** — opens the Results window for this plan.
 - **Edit** — opens the Editor window (raw JSON + a dedicated diff-threshold field).
@@ -99,5 +100,6 @@ The Results window (per test plan) lists past runs (`Run #N — <start time>`, w
 - **Download Collage** (per step) — composites Baseline / Test Run / Diff (whichever exist) stacked vertically, each labeled with its role and capture timestamp, into one PNG you save wherever you like.
 
 ## Known limitations
+- The side chevrons on each shelf are visual/interactive (they respond to clicks) but aren't wired to any scrolling behavior yet — packs auto-shrink to fit their shelf instead, so there's currently nothing that actually needs to scroll.
 - Screenshot capture requires the OS to grant Smoker Screen Recording permission (macOS will prompt on first use).
 - See [`docs/windows-compatibility.md`](docs/windows-compatibility.md) for a full audit of what would need attention to run this on Windows — short version: no code should block it, one macOS-oriented overlay-window behavior degrades gracefully, and there's no packaging/build config yet for producing an actual `.exe`.
