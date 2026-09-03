@@ -6,13 +6,15 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "preview3d": "electron preview3d-main.js"
   },
   "devDependencies": {
     "electron": "^44.0.0"
   },
   "dependencies": {
     "pixelmatch": "^5.3.0",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "three": "^0.185.1"
   }
 }
