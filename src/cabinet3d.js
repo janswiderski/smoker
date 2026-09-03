@@ -207,18 +207,18 @@ const SIDE_GAP = 30;
 const SIDE_GAP_2 = 20;
 const ICON_BUTTON_SIZE = 70;
 
-const PACK_COLORS = ['#2f6fed', '#e0393e', '#2fae5c', '#a04fd6', '#e08a1e', '#1eb8b0', '#d6417a'];
+const PACK_COMFORTABLE_MIN = 40; // below this, stop shrinking and switch to scrolling instead
+const SCROLL_STEP = SHELF_WIDTH * 0.6;
+const SCROLL_DURATION_MS = 400;
 
-const COLORS = {
-  body: 0x808080,
-  shelf: 0x2fae5c,
-  cover: 0xe0393e,
-  chevron: 0xe2e2e6,
-  edit: 0xffffff,
-  delete: 0xe0393e,
-  addProject: 0x4a4a4d,
-  addPack: 0xb8b8bc,
-};
+const PROP_GAP = 100; // clearance between the side buttons and the decorative props
+const TRASH_RADIUS_TOP = 90;
+const TRASH_RADIUS_BOTTOM = 76;
+const TRASH_HEIGHT = 220;
+const BOX_SIZE = 140;
+const BOX_HEIGHT = 120;
+
+const PACK_COLORS = ['#2f6fed', '#e0393e', '#2fae5c', '#a04fd6', '#e08a1e', '#1eb8b0', '#d6417a'];
 
 const halfW = BODY_WIDTH / 2;
 const halfD = BODY_DEPTH / 2;
@@ -257,24 +257,64 @@ const fillLight = new THREE.DirectionalLight(0xffffff, 0.35);
 fillLight.position.set(-800, 200, -600);
 scene.add(fillLight);
 
-const bodyMaterial = new THREE.MeshStandardMaterial({ color: COLORS.body, roughness: 0.8, metalness: 0.1 });
-const shelfMaterial = new THREE.MeshStandardMaterial({ color: COLORS.shelf, roughness: 0.6 });
-const coverMaterial = new THREE.MeshStandardMaterial({ color: COLORS.cover, roughness: 0.5 });
-const chevronMaterial = new THREE.MeshStandardMaterial({ color: COLORS.chevron, roughness: 0.5 });
-const addProjectMaterial = new THREE.MeshStandardMaterial({ color: COLORS.addProject, roughness: 0.6 });
-const addPackMaterial = new THREE.MeshStandardMaterial({ color: COLORS.addPack, roughness: 0.5 });
+// ---- Editable texture files (src/textures/*.png) — one per element ----
+renderer.localClippingEnabled = true;
+const textureLoader = new THREE.TextureLoader();
+function loadTexture(file) {
+  const texture = textureLoader.load(`textures/${file}`);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+const TEX = {
+  body: loadTexture('cabinet-body.png'),
+  shelf: loadTexture('shelf.png'),
+  cover: loadTexture('cover.png'),
+  coverAddProject: loadTexture('cover-add-project.png'),
+  pack: loadTexture('pack.png'), // near-white/neutral — tinted per pack via material.color
+  packAdd: loadTexture('pack-add.png'),
+  chevron: loadTexture('chevron.png'),
+  buttonEdit: loadTexture('button-edit.png'),
+  buttonDelete: loadTexture('button-delete.png'),
+  trashCan: loadTexture('trash-can.png'),
+  cardboardBox: loadTexture('cardboard-box.png'),
+};
+
+// Clips anything outside a shelf's own width — lets packs scroll "through" the shelf edges.
+const PACK_CLIP_PLANES = [
+  new THREE.Plane(new THREE.Vector3(1, 0, 0), SHELF_WIDTH / 2),
+  new THREE.Plane(new THREE.Vector3(-1, 0, 0), SHELF_WIDTH / 2),
+];
+
+const bodyMaterial = new THREE.MeshStandardMaterial({ map: TEX.body, roughness: 0.8, metalness: 0.1 });
+const shelfMaterial = new THREE.MeshStandardMaterial({ map: TEX.shelf, roughness: 0.6 });
+const coverMaterial = new THREE.MeshStandardMaterial({ map: TEX.cover, roughness: 0.5 });
+const chevronMaterial = new THREE.MeshStandardMaterial({ map: TEX.chevron, roughness: 0.5 });
+const addProjectMaterial = new THREE.MeshStandardMaterial({ map: TEX.coverAddProject, roughness: 0.6 });
+const addPackMaterial = new THREE.MeshStandardMaterial({ map: TEX.packAdd, roughness: 0.5, clippingPlanes: PACK_CLIP_PLANES });
+const editMaterial = new THREE.MeshStandardMaterial({ map: TEX.buttonEdit, roughness: 0.5 });
+const deleteMaterial = new THREE.MeshStandardMaterial({ map: TEX.buttonDelete, roughness: 0.5 });
+const trashCanMaterial = new THREE.MeshStandardMaterial({ map: TEX.trashCan, roughness: 0.6, metalness: 0.2 });
+const cardboardBoxMaterial = new THREE.MeshStandardMaterial({ map: TEX.cardboardBox, roughness: 0.9 });
 
 const contentGroup = new THREE.Group();
 scene.add(contentGroup);
 
+function disposeObject(obj) {
+  const children = obj.children ? obj.children.slice() : [];
+  for (const child of children) disposeObject(child);
+  if (obj.geometry) obj.geometry.dispose();
+  // Shared/loaded textures and module-level materials are reused across rebuilds by
+  // reference (three.js lazily re-initializes GPU resources on next use), so disposing
+  // them here on every rebuild is safe even though they aren't newly created each time.
+  if (obj.material) {
+    if (obj.material.map) obj.material.map.dispose();
+    obj.material.dispose();
+  }
+}
+
 function clearGroup(group) {
   while (group.children.length) {
-    const child = group.children.pop();
-    if (child.geometry) child.geometry.dispose();
-    if (child.material) {
-      if (child.material.map) child.material.map.dispose();
-      child.material.dispose();
-    }
+    disposeObject(group.children.pop());
   }
 }
 
@@ -310,16 +350,6 @@ function createLogoTexture() {
   }, 900, 220);
 }
 
-function createIconTexture(emoji) {
-  return createCanvasTexture((ctx, w, h) => {
-    ctx.clearRect(0, 0, w, h);
-    ctx.font = `${Math.round(h * 0.65)}px "Apple Color Emoji", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(emoji, w / 2, h / 2);
-  }, 128, 128);
-}
-
 function createLabelTexture(text) {
   return createCanvasTexture((ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
@@ -337,8 +367,9 @@ function createLabelTexture(text) {
   }, 512, 200);
 }
 
-function addPlane(width, height, texture, x, y, z, parent = contentGroup) {
+function addPlane(width, height, texture, x, y, z, parent = contentGroup, clippingPlanes) {
   const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+  if (clippingPlanes) material.clippingPlanes = clippingPlanes;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
   mesh.position.set(x, y, z);
   parent.add(mesh);
@@ -367,11 +398,8 @@ function addChevron(pointsLeft, x, y, z) {
   return mesh;
 }
 
-function addIconButton(material, emoji, x, y, z) {
-  const mesh = addBox(ICON_BUTTON_SIZE, ICON_BUTTON_SIZE, CHEVRON_DEPTH, material, x, y, z);
-  const iconTexture = createIconTexture(emoji);
-  addPlane(ICON_BUTTON_SIZE * 0.8, ICON_BUTTON_SIZE * 0.8, iconTexture, x, y, z + CHEVRON_DEPTH / 2 + 1);
-  return mesh;
+function addIconButton(material, x, y, z) {
+  return addBox(ICON_BUTTON_SIZE, ICON_BUTTON_SIZE, CHEVRON_DEPTH, material, x, y, z);
 }
 
 // ================================================================
@@ -382,6 +410,7 @@ let currentTestsByProject = new Map();
 let cameraInitialized = false;
 
 let swingingCovers = []; // { group, mesh, isOpen, animStart, animFrom, animTo }
+let scrollingRows = []; // { group, min, max, target, animFrom, animStart }
 let interactables = []; // { mesh, onClick }
 let pulseables = []; // { mesh, scale }
 let openCoverEntry = null;
@@ -401,15 +430,29 @@ function layoutPacks(count) {
   let packWidth = PACK_WIDTH_DEFAULT;
   const maxUsable = SHELF_WIDTH * 0.92;
   if (count * packWidth > maxUsable) {
-    packWidth = Math.max(PACK_MIN_WIDTH, maxUsable / count);
+    packWidth = maxUsable / count;
+  }
+  if (packWidth < PACK_COMFORTABLE_MIN) {
+    // Too many packs to shrink-to-fit comfortably — hold a readable fixed width
+    // and let the shelf scroll (via the side chevrons) instead of shrinking further.
+    const fixedWidth = PACK_COMFORTABLE_MIN;
+    const gap = fixedWidth * 0.3;
+    return { packWidth: fixedWidth, gap, scrollable: true };
   }
   const gap = (SHELF_WIDTH - count * packWidth) / (count + 1);
-  return { packWidth, gap };
+  return { packWidth, gap, scrollable: false };
+}
+
+function scrollRow(entry, delta) {
+  entry.animFrom = entry.group.position.x;
+  entry.target = Math.min(entry.max, Math.max(entry.min, entry.target + delta));
+  entry.animStart = performance.now();
 }
 
 function buildScene() {
   clearGroup(contentGroup);
   swingingCovers = [];
+  scrollingRows = [];
   interactables = [];
   pulseables = [];
   openCoverEntry = null;
@@ -443,6 +486,9 @@ function buildScene() {
   // ---- Trailing "add project" row ----
   buildAddProjectRow(currentProjects.length, cavityBottom);
 
+  // ---- Decorative props: trash can (right), stacked cardboard boxes (left) ----
+  buildProps(halfH);
+
   // ---- Camera: only positioned on the very first build, so edits don't reset the user's view ----
   if (!cameraInitialized) {
     const distance = Math.max(1800, bodyHeight * 1.3);
@@ -461,8 +507,11 @@ function buildRow(row, cavityBottom, project, tests) {
   addBox(SHELF_WIDTH, SHELF_HEIGHT, SHELF_DEPTH, shelfMaterial, 0, rowBottom + SHELF_HEIGHT / 2, shelfCenterZ);
 
   const packCount = tests.length + 1; // +1 for the trailing "add test plan" pack
-  const { packWidth, gap } = layoutPacks(packCount);
+  const { packWidth, gap, scrollable } = layoutPacks(packCount);
   const packCenterY = rowBottom + SHELF_HEIGHT + PACK_HEIGHT / 2;
+
+  const packGroup = new THREE.Group();
+  contentGroup.add(packGroup);
 
   for (let i = 0; i < packCount; i++) {
     const leftEdge = -SHELF_WIDTH / 2 + gap * (i + 1) + packWidth * i;
@@ -470,21 +519,28 @@ function buildRow(row, cavityBottom, project, tests) {
     const isAddPack = i === tests.length;
     const material = isAddPack
       ? addPackMaterial
-      : new THREE.MeshStandardMaterial({ color: PACK_COLORS[i % PACK_COLORS.length], roughness: 0.4 });
-    const packMesh = addBox(packWidth, PACK_HEIGHT, PACK_DEPTH, material, centerX, packCenterY, shelfCenterZ);
+      : new THREE.MeshStandardMaterial({ color: PACK_COLORS[i % PACK_COLORS.length], map: TEX.pack, roughness: 0.4, clippingPlanes: PACK_CLIP_PLANES });
+    const packMesh = addBox(packWidth, PACK_HEIGHT, PACK_DEPTH, material, centerX, packCenterY, shelfCenterZ, packGroup);
 
     if (isAddPack) {
       const plusTexture = createLabelTexture('+ Add Test Plan');
-      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), plusTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1);
+      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), plusTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1, packGroup, PACK_CLIP_PLANES);
       interactables.push({ mesh: packMesh, onClick: () => addTestPlanFlow(project) });
     } else {
       const test = tests[i];
       const labelTexture = createLabelTexture(test.name);
-      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), labelTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1);
+      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), labelTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1, packGroup, PACK_CLIP_PLANES);
       const color = PACK_COLORS[i % PACK_COLORS.length];
       interactables.push({ mesh: packMesh, onClick: () => openActionPanel(test, color) });
     }
   }
+
+  // How far the pack row overflows the shelf's own width — the scroll range.
+  const contentWidth = gap * (packCount + 1) + packWidth * packCount;
+  const overflow = Math.max(0, contentWidth - SHELF_WIDTH);
+  const scrollEntry = { group: packGroup, min: -overflow, max: 0, target: 0, animFrom: 0, animStart: 0 };
+  scrollingRows.push(scrollEntry);
+  const needsScroll = scrollable && overflow > 0;
 
   // Cover: hinged at its bottom edge, swings up and forward when opened
   const coverClosedCenterZ = cavityFrontZ - COVER_DEPTH / 2;
@@ -510,17 +566,41 @@ function buildRow(row, cavityBottom, project, tests) {
 
   const leftChevron = addChevron(true, leftChevronX, rowCenterY, sideZ);
   const rightChevron = addChevron(false, rightChevronX, rowCenterY, sideZ);
-  const editMaterial = new THREE.MeshStandardMaterial({ color: COLORS.edit, roughness: 0.5 });
-  const deleteMaterial = new THREE.MeshStandardMaterial({ color: COLORS.delete, roughness: 0.5 });
-  const editBtn = addIconButton(editMaterial, '✏️', editX, rowCenterY, sideZ);
-  const deleteBtn = addIconButton(deleteMaterial, '🗑️', deleteX, rowCenterY, sideZ);
+  leftChevron.visible = needsScroll;
+  rightChevron.visible = needsScroll;
+  const editBtn = addIconButton(editMaterial, editX, rowCenterY, sideZ);
+  const deleteBtn = addIconButton(deleteMaterial, deleteX, rowCenterY, sideZ);
 
-  pulseables.push({ mesh: leftChevron, scale: 1 }, { mesh: rightChevron, scale: 1 });
-  interactables.push({ mesh: leftChevron, onClick: () => pulse(leftChevron) });
-  interactables.push({ mesh: rightChevron, onClick: () => pulse(rightChevron) });
+  if (needsScroll) {
+    pulseables.push({ mesh: leftChevron, scale: 1 }, { mesh: rightChevron, scale: 1 });
+    interactables.push({ mesh: leftChevron, onClick: () => { pulse(leftChevron); scrollRow(scrollEntry, SCROLL_STEP); } });
+    interactables.push({ mesh: rightChevron, onClick: () => { pulse(rightChevron); scrollRow(scrollEntry, -SCROLL_STEP); } });
+  }
   pulseables.push({ mesh: editBtn, scale: 1 }, { mesh: deleteBtn, scale: 1 });
   interactables.push({ mesh: editBtn, onClick: () => { pulse(editBtn); renameProjectFlow(project); } });
   interactables.push({ mesh: deleteBtn, onClick: () => { pulse(deleteBtn); deleteProjectFlow(project); } });
+}
+
+function buildProps(halfH) {
+  const deleteEdgeX = halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE;
+  const editEdgeX = -deleteEdgeX;
+
+  const trashX = deleteEdgeX + PROP_GAP + TRASH_RADIUS_TOP;
+  const trashMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(TRASH_RADIUS_TOP, TRASH_RADIUS_BOTTOM, TRASH_HEIGHT, 24),
+    trashCanMaterial
+  );
+  trashMesh.position.set(trashX, -halfH + TRASH_HEIGHT / 2, 0);
+  contentGroup.add(trashMesh);
+
+  const boxX = editEdgeX - PROP_GAP - BOX_SIZE / 2;
+  const boxTilts = [-0.05, 0.04, -0.03];
+  for (let i = 0; i < 3; i++) {
+    const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(BOX_SIZE, BOX_HEIGHT, BOX_SIZE), cardboardBoxMaterial);
+    boxMesh.position.set(boxX, -halfH + BOX_HEIGHT * (i + 0.5), 0);
+    boxMesh.rotation.y = boxTilts[i];
+    contentGroup.add(boxMesh);
+  }
 }
 
 function buildAddProjectRow(row, cavityBottom) {
@@ -585,6 +665,13 @@ function animate() {
     const t = Math.min(1, (now - cover.animStart) / SWING_DURATION_MS);
     cover.group.rotation.x = cover.animFrom + (cover.animTo - cover.animFrom) * easeInOutCubic(t);
     if (t >= 1) cover.animStart = 0;
+  }
+
+  for (const row of scrollingRows) {
+    if (row.animStart === 0) continue;
+    const t = Math.min(1, (now - row.animStart) / SCROLL_DURATION_MS);
+    row.group.position.x = row.animFrom + (row.target - row.animFrom) * easeInOutCubic(t);
+    if (t >= 1) row.animStart = 0;
   }
 
   for (const entry of pulseables) {

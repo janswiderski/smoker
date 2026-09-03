@@ -19,6 +19,7 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 - `src/cabinet3d.html` + `src/cabinet3d.js` — the main window: a Three.js scene for the cabinet, plus a handful of ordinary DOM overlay elements (action panel, rename/create-project prompt, error banner) layered on top of the canvas for anything that's just text and buttons.
 - `src/*.html` + `src/*.js` (the rest) — one pair per secondary window (see below), plain DOM/CSS, no build step.
 - `src/styles.css` — shared stylesheet for every window, including the DOM overlays inside `cabinet3d.html`.
+- `src/textures/*.png` — the surface texture for every 3D element (cabinet body, shelf, cover, packs, chevrons, buttons, trash can, cardboard boxes). See [`src/textures/README.md`](src/textures/README.md) for the file-to-element mapping — swap any of them out and reload to restyle that element.
 - `lib/diff.js` — the `pixelmatch`/`pngjs` wrapper used to compare two screenshots and produce a highlighted diff image.
 
 ### Windows
@@ -74,7 +75,7 @@ On first launch, `smoke-tests/` is seeded from the bundled `smoke-tests/` folder
 From the main menu (the 3D cabinet, orbit with drag / zoom with scroll): each project is a shelf with a colored cover. Click a cover to swing it open on its hinge (only one shelf open at a time — opening another closes whichever was open) and reveal its test plans as "packs" sitting on the shelf behind. Each row also has a chevron on either side and edit (✏️)/delete (🗑) buttons flanking the cabinet — edit prompts to rename that project, delete removes it and cascades (every test plan in it, plus their run history and baselines, after a confirmation naming the count). A dedicated dark cover at the top of the stack, "+ Add New Project," prompts for a name and creates a new empty project. The cabinet's height and the logo's position both adjust automatically as projects are added or removed.
 
 ### Managing test plans
-Inside an open project shelf, each test plan is a colored pack showing its name. If a project has more test plans than comfortably fit the shelf's width, packs shrink to fit rather than needing to scroll (the side chevrons are present but not yet wired to scrolling — a placeholder for now). The last pack, "+ Add Test Plan," offers a choice:
+Inside an open project shelf, each test plan is a colored pack showing its name. Packs shrink to fit the shelf's width as more test plans are added; once they'd get uncomfortably small, the shelf switches to a fixed pack width and scrolls instead — the side chevrons appear only on shelves that actually need it, and click them to scroll the packs left/right. The last pack, "+ Add Test Plan," offers a choice:
 - **Create Blank** — prompts for a name, creates a one-step placeholder plan, and opens it directly in the Editor.
 - **Import JSON File…** — the classic file-picker flow; validates the file has `name` + a non-empty `steps` array, then assigns it to the current project.
 
@@ -100,6 +101,5 @@ The Results window (per test plan) lists past runs (`Run #N — <start time>`, w
 - **Download Collage** (per step) — composites Baseline / Test Run / Diff (whichever exist) stacked vertically, each labeled with its role and capture timestamp, into one PNG you save wherever you like.
 
 ## Known limitations
-- The side chevrons on each shelf are visual/interactive (they respond to clicks) but aren't wired to any scrolling behavior yet — packs auto-shrink to fit their shelf instead, so there's currently nothing that actually needs to scroll.
 - Screenshot capture requires the OS to grant Smoker Screen Recording permission (macOS will prompt on first use).
 - See [`docs/windows-compatibility.md`](docs/windows-compatibility.md) for a full audit of what would need attention to run this on Windows — short version: no code should block it, one macOS-oriented overlay-window behavior degrades gracefully, and there's no packaging/build config yet for producing an actual `.exe`.
