@@ -88,7 +88,8 @@ function createStartWindow() {
     minWidth: 480,
     minHeight: 520,
     resizable: true,
-    frame: false,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 20, y: 20 },
     backgroundColor: '#3a3a3d',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -549,14 +550,6 @@ ipcMain.handle('reveal-in-finder', (_event, filePath) => {
   shell.showItemInFolder(filePath);
 });
 
-ipcMain.handle('minimize-window', (event) => {
-  BrowserWindow.fromWebContents(event.sender)?.minimize();
-});
-
-ipcMain.handle('quit-app', () => {
-  app.quit();
-});
-
 ipcMain.handle('open-path', (_event, filePath) => {
   shell.openPath(filePath);
 });
@@ -673,7 +666,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
 
 app.on('activate', () => {

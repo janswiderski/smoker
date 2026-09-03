@@ -55,9 +55,6 @@ const CHEVRON_SCROLL_AMOUNT = 280;
 let openUnitEl = null;
 let selectedTestFile = null;
 
-document.getElementById('winCloseBtn').addEventListener('click', () => window.api.quitApp());
-document.getElementById('winMinimizeBtn').addEventListener('click', () => window.api.minimizeWindow());
-
 (function splitLogoLetters() {
   const logoEl = document.querySelector('.cabinet-logo');
   const text = logoEl.textContent;
