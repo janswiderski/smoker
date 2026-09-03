@@ -297,8 +297,8 @@ body.transparent-bg { background: transparent; }
   z-index: 2;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   align-self: center;
+  visibility: hidden;
 }
-.shelf-unit:not(.open) .chevron-btn { display: none; }
 
 .pack-row {
   flex: 1;
