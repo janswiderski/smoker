@@ -2,16 +2,17 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // ---- Spec dimensions (all in arbitrary "units") ----
-const BODY_WIDTH = 500;
+const BODY_WIDTH = 700;
 const BODY_DEPTH = 200;
 const BODY_HEIGHT = 1500;
 
 const INDENT_MARGIN_X = 50; // cavity starts/ends this far from the left/right edges
-const INDENT_TOP_MARGIN = 200; // cavity starts this far from the top
 const INDENT_BOTTOM_MARGIN = 400; // cavity ends this far from the bottom
 const INDENT_DEPTH = 50; // how deep the cavity cuts in from the front face
+// (there is no top margin input anymore: the cavity's top is derived below so it
+// matches the covers stack exactly, with no leftover gap above the topmost cover)
 
-const SHELF_WIDTH = 400;
+const SHELF_WIDTH = 600;
 const SHELF_DEPTH = 40;
 const SHELF_HEIGHT = 10;
 
@@ -19,22 +20,33 @@ const PACK_HEIGHT = 100;
 const PACK_WIDTH = 60;
 const PACK_DEPTH = 20;
 
-const COVER_WIDTH = 400;
+const COVER_WIDTH = 600;
 const COVER_HEIGHT = 150;
 const COVER_DEPTH = 10;
 
 const SHELF_COUNT = 5;
-const PACKS_PER_SHELF = 5;
-const ROW_GAP = 6; // small visual seam between rows so 5 covers don't render as one seamless panel
+const PACKS_PER_SHELF = 6;
+const ROW_GAP = 6; // small visual seam between rows so covers don't render as one seamless panel
 const ROW_PITCH = COVER_HEIGHT + ROW_GAP; // vertical spacing from one row's bottom to the next
-const OPEN_ANGLE = -110 * (Math.PI / 180);
+const OPEN_ANGLE = 110 * (Math.PI / 180); // positive: hinge at the BOTTOM, swings up and out
 const SWING_DURATION_MS = 650;
+
+// Side controls (chevrons + edit/delete), one set per row
+const CHEVRON_WIDTH = 50;
+const CHEVRON_HEIGHT = 100;
+const CHEVRON_DEPTH = 20;
+const SIDE_GAP = 30; // clearance from the cabinet body to the first side control
+const SIDE_GAP_2 = 20; // clearance from the chevron to the edit/delete button
+const ICON_BUTTON_SIZE = 70;
 
 const COLORS = {
   body: 0x808080, // grey
   shelf: 0x2fae5c, // green
   pack: 0x2f6fed, // blue
   cover: 0xe0393e, // red
+  chevron: 0xe2e2e6,
+  edit: 0xffffff,
+  delete: 0xe0393e,
 };
 
 // ---- Derived cavity bounds (body centered at the origin) ----
@@ -44,8 +56,8 @@ const halfD = BODY_DEPTH / 2;
 
 const cavityLeft = -halfW + INDENT_MARGIN_X;
 const cavityRight = halfW - INDENT_MARGIN_X;
-const cavityTop = halfH - INDENT_TOP_MARGIN;
 const cavityBottom = -halfH + INDENT_BOTTOM_MARGIN;
+const cavityTop = cavityBottom + (SHELF_COUNT - 1) * ROW_PITCH + COVER_HEIGHT; // exactly matches the covers stack, no gap
 const cavityFrontZ = halfD;
 const cavityBackZ = halfD - INDENT_DEPTH;
 
@@ -54,7 +66,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1c1c1e);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-camera.position.set(650, 150, 1900);
+camera.position.set(750, 150, 2300);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -86,11 +98,87 @@ const bodyMaterial = new THREE.MeshStandardMaterial({ color: COLORS.body, roughn
 const shelfMaterial = new THREE.MeshStandardMaterial({ color: COLORS.shelf, roughness: 0.6 });
 const packMaterial = new THREE.MeshStandardMaterial({ color: COLORS.pack, roughness: 0.4 });
 const coverMaterial = new THREE.MeshStandardMaterial({ color: COLORS.cover, roughness: 0.5 });
+const chevronMaterial = new THREE.MeshStandardMaterial({ color: COLORS.chevron, roughness: 0.5 });
 
 function addBox(width, height, depth, material, x, y, z, parent = scene) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(x, y, z);
   parent.add(mesh);
+  return mesh;
+}
+
+// ---- Canvas-texture helpers (logo + icon glyphs) ----
+function createCanvasTexture(drawFn, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  drawFn(canvas.getContext('2d'), width, height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createLogoTexture() {
+  return createCanvasTexture((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = 'italic bold 100px Georgia, "Times New Roman", serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#59e816';
+    ctx.shadowBlur = 40;
+    ctx.fillStyle = '#59e816';
+    ctx.fillText('SMOKER', w / 2, h / 2);
+    ctx.fillText('SMOKER', w / 2, h / 2); // second pass builds up a stronger glow
+  }, 900, 220);
+}
+
+function createIconTexture(emoji) {
+  return createCanvasTexture((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = `${Math.round(h * 0.65)}px "Apple Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, w / 2, h / 2);
+  }, 128, 128);
+}
+
+function addPlane(width, height, texture, x, y, z) {
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  return mesh;
+}
+
+// Solid triangular chevron, `pointsLeft` controls which way it points.
+function addChevron(pointsLeft, x, y, z) {
+  const shape = new THREE.Shape();
+  const halfCw = CHEVRON_WIDTH / 2;
+  const halfCh = CHEVRON_HEIGHT / 2;
+  if (pointsLeft) {
+    shape.moveTo(-halfCw, 0);
+    shape.lineTo(halfCw, halfCh);
+    shape.lineTo(halfCw, -halfCh);
+  } else {
+    shape.moveTo(halfCw, 0);
+    shape.lineTo(-halfCw, halfCh);
+    shape.lineTo(-halfCw, -halfCh);
+  }
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: CHEVRON_DEPTH, bevelEnabled: false });
+  geometry.translate(0, 0, -CHEVRON_DEPTH / 2);
+  const mesh = new THREE.Mesh(geometry, chevronMaterial);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  return mesh;
+}
+
+// Flat colored icon button (edit/delete), with an emoji glyph on its front face.
+function addIconButton(color, emoji, x, y, z) {
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+  const mesh = addBox(ICON_BUTTON_SIZE, ICON_BUTTON_SIZE, CHEVRON_DEPTH, material, x, y, z);
+  const iconTexture = createIconTexture(emoji);
+  addPlane(ICON_BUTTON_SIZE * 0.8, ICON_BUTTON_SIZE * 0.8, iconTexture, x, y, z + CHEVRON_DEPTH / 2 + 1);
   return mesh;
 }
 
@@ -110,12 +198,18 @@ addBox(cavityLeft - -halfW, cavityTop - cavityBottom, frameDepth, bodyMaterial, 
 // right strip
 addBox(halfW - cavityRight, cavityTop - cavityBottom, frameDepth, bodyMaterial, (cavityRight + halfW) / 2, (cavityTop + cavityBottom) / 2, frameCenterZ);
 
-// ---- Rows: shelf + packs + swinging cover, stacked bottom-up ----
-const swingingCovers = []; // { group, isOpen }
+// ---- Logo: placed above the topmost ("first", reading top-down) section cover ----
+const logoTexture = createLogoTexture();
+addPlane(500, 122, logoTexture, 0, (cavityTop + halfH) / 2, cavityFrontZ + 1);
+
+// ---- Rows: shelf + packs + swinging cover + side controls, stacked bottom-up ----
+const swingingCovers = []; // { group, mesh, isOpen, animStart, animFrom, animTo }
+const pulseables = []; // { mesh, scale: current pulse scale }
 
 for (let row = 0; row < SHELF_COUNT; row++) {
   const rowBottom = cavityBottom + row * ROW_PITCH;
   const rowTop = rowBottom + COVER_HEIGHT;
+  const rowCenterY = rowBottom + COVER_HEIGHT / 2;
 
   // Shelf: centered in the cavity's depth range
   const shelfCenterZ = cavityBackZ + INDENT_DEPTH / 2;
@@ -131,20 +225,39 @@ for (let row = 0; row < SHELF_COUNT; row++) {
     addBox(PACK_WIDTH, PACK_HEIGHT, PACK_DEPTH, packMaterial, packCenterX, packCenterY, shelfCenterZ);
   }
 
-  // Cover: hinged at its top edge (rowTop), sits flush with the cavity's front opening when closed
+  // Cover: hinged at its BOTTOM edge (rowBottom), swings up and forward when opened
   const coverClosedCenterZ = cavityFrontZ - COVER_DEPTH / 2;
   const hinge = new THREE.Group();
-  hinge.position.set(0, rowTop, coverClosedCenterZ);
+  hinge.position.set(0, rowBottom, coverClosedCenterZ);
   scene.add(hinge);
 
   const coverMesh = new THREE.Mesh(new THREE.BoxGeometry(COVER_WIDTH, COVER_HEIGHT, COVER_DEPTH), coverMaterial);
-  coverMesh.position.set(0, -COVER_HEIGHT / 2, 0);
+  coverMesh.position.set(0, COVER_HEIGHT / 2, 0);
   hinge.add(coverMesh);
 
   swingingCovers.push({ group: hinge, mesh: coverMesh, isOpen: false, animStart: 0, animFrom: 0, animTo: 0 });
+
+  // Side controls: chevrons flank the row, edit/delete sit further outward on each side
+  const sideZ = coverClosedCenterZ;
+  const leftChevronX = -(halfW + SIDE_GAP + CHEVRON_WIDTH / 2);
+  const rightChevronX = halfW + SIDE_GAP + CHEVRON_WIDTH / 2;
+  const editX = -(halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE / 2);
+  const deleteX = halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE / 2;
+
+  const leftChevron = addChevron(true, leftChevronX, rowCenterY, sideZ);
+  const rightChevron = addChevron(false, rightChevronX, rowCenterY, sideZ);
+  const editBtn = addIconButton(COLORS.edit, '✏️', editX, rowCenterY, sideZ);
+  const deleteBtn = addIconButton(COLORS.delete, '🗑️', deleteX, rowCenterY, sideZ);
+
+  pulseables.push(
+    { mesh: leftChevron, scale: 1 },
+    { mesh: rightChevron, scale: 1 },
+    { mesh: editBtn, scale: 1 },
+    { mesh: deleteBtn, scale: 1 },
+  );
 }
 
-// ---- Click-to-swing interaction ----
+// ---- Click interaction ----
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
@@ -153,15 +266,22 @@ renderer.domElement.addEventListener('click', (event) => {
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
 
-  const hit = raycaster.intersectObjects(swingingCovers.map((c) => c.mesh));
-  if (hit.length === 0) return;
+  const coverHit = raycaster.intersectObjects(swingingCovers.map((c) => c.mesh));
+  if (coverHit.length > 0) {
+    const cover = swingingCovers.find((c) => c.mesh === coverHit[0].object);
+    const now = performance.now();
+    cover.animFrom = cover.group.rotation.x;
+    cover.isOpen = !cover.isOpen;
+    cover.animTo = cover.isOpen ? OPEN_ANGLE : 0;
+    cover.animStart = now;
+    return;
+  }
 
-  const cover = swingingCovers.find((c) => c.mesh === hit[0].object);
-  const now = performance.now();
-  cover.animFrom = cover.group.rotation.x;
-  cover.isOpen = !cover.isOpen;
-  cover.animTo = cover.isOpen ? OPEN_ANGLE : 0;
-  cover.animStart = now;
+  const sideHit = raycaster.intersectObjects(pulseables.map((p) => p.mesh));
+  if (sideHit.length > 0) {
+    const entry = pulseables.find((p) => p.mesh === sideHit[0].object);
+    entry.scale = 1.25; // decays back to 1 in the render loop, just a click acknowledgment
+  }
 });
 
 function easeInOutCubic(t) {
@@ -178,6 +298,13 @@ function animate() {
     const t = Math.min(1, (now - cover.animStart) / SWING_DURATION_MS);
     cover.group.rotation.x = cover.animFrom + (cover.animTo - cover.animFrom) * easeInOutCubic(t);
     if (t >= 1) cover.animStart = 0;
+  }
+
+  for (const entry of pulseables) {
+    if (entry.scale > 1) {
+      entry.scale = Math.max(1, entry.scale - 0.02);
+      entry.mesh.scale.setScalar(entry.scale);
+    }
   }
 
   controls.update();
