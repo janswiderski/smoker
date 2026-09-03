@@ -6,8 +6,7 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron .",
-    "preview3d": "electron preview3d-main.js"
+    "start": "electron ."
   },
   "devDependencies": {
     "electron": "^44.0.0"

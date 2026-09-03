@@ -2,25 +2,47 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Smoker — 3D Cabinet Preview</title>
+  <title>Smoker</title>
+  <link rel="stylesheet" href="styles.css" />
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #1c1c1e; }
-    #hint {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      color: #d0d0d3;
-      font: 13px -apple-system, sans-serif;
-      background: rgba(0, 0, 0, 0.4);
-      padding: 8px 12px;
-      border-radius: 8px;
-      z-index: 10;
-    }
-    canvas { display: block; }
+    canvas { display: block; -webkit-app-region: no-drag; }
+    #dragStrip { position: fixed; top: 0; left: 0; right: 0; height: 40px; -webkit-app-region: drag; z-index: 5; }
   </style>
 </head>
 <body>
-  <div id="hint">Drag to orbit · scroll to zoom · click a red cover to swing it open</div>
+  <div id="dragStrip"></div>
+  <div id="error" class="error-banner floating" style="display:none;"></div>
+
+  <div id="actionOverlay" class="action-overlay" style="display:none;">
+    <div class="action-panel">
+      <div class="action-panel-notch"></div>
+      <div class="action-panel-body">
+        <h3 id="actionPlanName"></h3>
+        <div class="action-buttons">
+          <button id="actionStartBtn" class="primary">Start Run</button>
+          <button id="actionResultsBtn" class="secondary">View Test Runs</button>
+          <button id="actionEditBtn" class="secondary">Edit</button>
+          <button id="actionDownloadBtn" class="secondary">Download</button>
+          <button id="actionDeleteBtn" class="secondary danger-outline">Delete</button>
+        </div>
+        <button id="actionBackBtn" class="secondary action-back">← Back</button>
+      </div>
+      <div class="action-panel-band"></div>
+    </div>
+  </div>
+
+  <div id="textPromptOverlay" class="action-overlay" style="display:none;">
+    <div class="prompt-panel">
+      <h3 id="textPromptTitle"></h3>
+      <input type="text" id="textPromptInput" class="text-prompt-input" />
+      <div class="action-buttons">
+        <button id="textPromptOkBtn" class="primary">OK</button>
+        <button id="textPromptCancelBtn" class="secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script type="importmap">
   {
     "imports": {

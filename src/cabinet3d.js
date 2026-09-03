@@ -1,72 +1,239 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// ---- Spec dimensions (all in arbitrary "units") ----
+// ================================================================
+// DOM overlay: error banner, action panel (per test plan), text prompt
+// ================================================================
+const errorEl = document.getElementById('error');
+function showError(message) {
+  errorEl.textContent = message;
+  errorEl.style.display = message ? 'block' : 'none';
+}
+
+const actionOverlay = document.getElementById('actionOverlay');
+const actionPlanNameEl = document.getElementById('actionPlanName');
+const actionStartBtn = document.getElementById('actionStartBtn');
+const actionResultsBtn = document.getElementById('actionResultsBtn');
+const actionEditBtn = document.getElementById('actionEditBtn');
+const actionDownloadBtn = document.getElementById('actionDownloadBtn');
+const actionDeleteBtn = document.getElementById('actionDeleteBtn');
+const actionBackBtn = document.getElementById('actionBackBtn');
+let selectedTestFile = null;
+
+function openActionPanel(test, color) {
+  selectedTestFile = test.file;
+  actionPlanNameEl.textContent = test.name;
+  const panel = actionOverlay.querySelector('.action-panel');
+  panel.style.setProperty('--pack-color', color || '#2f6fed');
+  actionOverlay.style.display = 'flex';
+  panel.classList.remove('flip-in');
+  panel.style.opacity = '';
+  panel.style.transform = '';
+  void panel.offsetWidth;
+  panel.classList.add('flip-in');
+  // Safety net: guarantee the panel ends up fully visible even if the CSS
+  // animation never completes (e.g. a throttled/backgrounded window).
+  clearTimeout(panel._flipInFallbackTimer);
+  panel._flipInFallbackTimer = setTimeout(() => {
+    panel.classList.remove('flip-in');
+    panel.style.opacity = '1';
+    panel.style.transform = 'none';
+  }, 600);
+}
+function closeActionPanel() {
+  actionOverlay.style.display = 'none';
+  selectedTestFile = null;
+}
+actionOverlay.addEventListener('click', (e) => { if (e.target === actionOverlay) closeActionPanel(); });
+actionBackBtn.addEventListener('click', closeActionPanel);
+actionStartBtn.addEventListener('click', async () => {
+  if (!selectedTestFile) return;
+  showError('');
+  try {
+    await window.api.startRun(selectedTestFile);
+    closeActionPanel();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+});
+actionResultsBtn.addEventListener('click', () => {
+  if (selectedTestFile) window.api.openResults(selectedTestFile);
+});
+actionEditBtn.addEventListener('click', () => {
+  if (selectedTestFile) window.api.openEditor(selectedTestFile);
+});
+actionDownloadBtn.addEventListener('click', async () => {
+  if (!selectedTestFile) return;
+  showError('');
+  try {
+    await window.api.downloadTestPlan(selectedTestFile);
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+});
+actionDeleteBtn.addEventListener('click', async () => {
+  if (!selectedTestFile) return;
+  if (!window.confirm(`Delete "${actionPlanNameEl.textContent}" and all of its run history? This cannot be undone.`)) return;
+  await window.api.deleteSmokeTest(selectedTestFile);
+  closeActionPanel();
+  await loadAndBuild();
+});
+
+const textPromptOverlay = document.getElementById('textPromptOverlay');
+const textPromptTitle = document.getElementById('textPromptTitle');
+const textPromptInput = document.getElementById('textPromptInput');
+const textPromptOkBtn = document.getElementById('textPromptOkBtn');
+const textPromptCancelBtn = document.getElementById('textPromptCancelBtn');
+let textPromptResolve = null;
+
+function promptForText(title, defaultValue) {
+  return new Promise((resolve) => {
+    textPromptResolve = resolve;
+    textPromptTitle.textContent = title;
+    textPromptInput.value = defaultValue || '';
+    textPromptOverlay.style.display = 'flex';
+    requestAnimationFrame(() => { textPromptInput.focus(); textPromptInput.select(); });
+  });
+}
+function closeTextPrompt(result) {
+  textPromptOverlay.style.display = 'none';
+  if (textPromptResolve) {
+    const resolve = textPromptResolve;
+    textPromptResolve = null;
+    resolve(result);
+  }
+}
+textPromptOkBtn.addEventListener('click', () => closeTextPrompt(textPromptInput.value));
+textPromptCancelBtn.addEventListener('click', () => closeTextPrompt(null));
+textPromptInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') closeTextPrompt(textPromptInput.value);
+  if (e.key === 'Escape') closeTextPrompt(null);
+});
+textPromptOverlay.addEventListener('click', (e) => { if (e.target === textPromptOverlay) closeTextPrompt(null); });
+
+// ================================================================
+// Project/test-plan actions (mirror the 2D app's flows)
+// ================================================================
+async function createProjectFlow() {
+  const name = await promptForText('New project name:');
+  if (!name || !name.trim()) return;
+  showError('');
+  try {
+    await window.api.createProject(name.trim());
+    await loadAndBuild();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+async function renameProjectFlow(project) {
+  const newName = await promptForText('Rename project:', project.name);
+  if (!newName || !newName.trim() || newName.trim() === project.name) return;
+  showError('');
+  try {
+    await window.api.renameProject(project.id, newName.trim());
+    await loadAndBuild();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+async function deleteProjectFlow(project) {
+  showError('');
+  try {
+    const tests = currentTestsByProject.get(project.id) || [];
+    const warning = tests.length > 0
+      ? `Delete "${project.name}" and permanently remove its ${tests.length} test plan${tests.length === 1 ? '' : 's'} (including all run history)? This cannot be undone.`
+      : `Delete "${project.name}"? This cannot be undone.`;
+    if (!window.confirm(warning)) return;
+    await window.api.deleteProject(project.id);
+    await loadAndBuild();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+async function addTestPlanFlow(project) {
+  showError('');
+  try {
+    const mode = await window.api.chooseAddTestPlanMode();
+    if (mode === 'blank') {
+      const name = await promptForText('New test plan name:');
+      if (!name || !name.trim()) return;
+      const created = await window.api.createBlankTestPlan(name.trim(), project.id);
+      await loadAndBuild();
+      window.api.openEditor(created.file);
+    } else if (mode === 'import') {
+      const uploaded = await window.api.uploadSmokeTest(project.id);
+      if (uploaded) await loadAndBuild();
+    }
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+// ================================================================
+// Fixed dimensions (units match the spec given for the cabinet parts)
+// ================================================================
 const BODY_WIDTH = 700;
 const BODY_DEPTH = 200;
-const BODY_HEIGHT = 1500;
-
-const INDENT_MARGIN_X = 50; // cavity starts/ends this far from the left/right edges
-const INDENT_BOTTOM_MARGIN = 400; // cavity ends this far from the bottom
-const INDENT_DEPTH = 50; // how deep the cavity cuts in from the front face
-// (there is no top margin input anymore: the cavity's top is derived below so it
-// matches the covers stack exactly, with no leftover gap above the topmost cover)
+const INDENT_MARGIN_X = 50;
+const INDENT_DEPTH = 50;
+const HEADER_SPACE = 260; // room above the cavity for the logo
+const FOOTER_SPACE = 150; // room below the cavity
 
 const SHELF_WIDTH = 600;
 const SHELF_DEPTH = 40;
 const SHELF_HEIGHT = 10;
 
 const PACK_HEIGHT = 100;
-const PACK_WIDTH = 60;
+const PACK_WIDTH_DEFAULT = 60;
+const PACK_MIN_WIDTH = 30;
 const PACK_DEPTH = 20;
 
 const COVER_WIDTH = 600;
 const COVER_HEIGHT = 150;
 const COVER_DEPTH = 10;
 
-const SHELF_COUNT = 5;
-const PACKS_PER_SHELF = 6;
-const ROW_GAP = 6; // small visual seam between rows so covers don't render as one seamless panel
-const ROW_PITCH = COVER_HEIGHT + ROW_GAP; // vertical spacing from one row's bottom to the next
-const OPEN_ANGLE = 110 * (Math.PI / 180); // positive: hinge at the BOTTOM, swings up and out
+const ROW_GAP = 6;
+const ROW_PITCH = COVER_HEIGHT + ROW_GAP;
+const OPEN_ANGLE = 110 * (Math.PI / 180); // positive: hinge at the bottom, swings up and out
 const SWING_DURATION_MS = 650;
 
-// Side controls (chevrons + edit/delete), one set per row
 const CHEVRON_WIDTH = 50;
 const CHEVRON_HEIGHT = 100;
 const CHEVRON_DEPTH = 20;
-const SIDE_GAP = 30; // clearance from the cabinet body to the first side control
-const SIDE_GAP_2 = 20; // clearance from the chevron to the edit/delete button
+const SIDE_GAP = 30;
+const SIDE_GAP_2 = 20;
 const ICON_BUTTON_SIZE = 70;
 
+const PACK_COLORS = ['#2f6fed', '#e0393e', '#2fae5c', '#a04fd6', '#e08a1e', '#1eb8b0', '#d6417a'];
+
 const COLORS = {
-  body: 0x808080, // grey
-  shelf: 0x2fae5c, // green
-  pack: 0x2f6fed, // blue
-  cover: 0xe0393e, // red
+  body: 0x808080,
+  shelf: 0x2fae5c,
+  cover: 0xe0393e,
   chevron: 0xe2e2e6,
   edit: 0xffffff,
   delete: 0xe0393e,
+  addProject: 0x4a4a4d,
+  addPack: 0xb8b8bc,
 };
 
-// ---- Derived cavity bounds (body centered at the origin) ----
 const halfW = BODY_WIDTH / 2;
-const halfH = BODY_HEIGHT / 2;
 const halfD = BODY_DEPTH / 2;
-
 const cavityLeft = -halfW + INDENT_MARGIN_X;
 const cavityRight = halfW - INDENT_MARGIN_X;
-const cavityBottom = -halfH + INDENT_BOTTOM_MARGIN;
-const cavityTop = cavityBottom + (SHELF_COUNT - 1) * ROW_PITCH + COVER_HEIGHT; // exactly matches the covers stack, no gap
 const cavityFrontZ = halfD;
 const cavityBackZ = halfD - INDENT_DEPTH;
 
-// ---- Renderer / scene / camera ----
+// ================================================================
+// Renderer / scene / camera (created once)
+// ================================================================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1c1c1e);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-camera.position.set(750, 150, 2300);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -74,9 +241,7 @@ renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0, 0);
 controls.enableDamping = true;
-controls.update();
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -84,7 +249,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ---- Lighting ----
 scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
 keyLight.position.set(600, 900, 1200);
@@ -93,14 +257,28 @@ const fillLight = new THREE.DirectionalLight(0xffffff, 0.35);
 fillLight.position.set(-800, 200, -600);
 scene.add(fillLight);
 
-// ---- Materials ----
 const bodyMaterial = new THREE.MeshStandardMaterial({ color: COLORS.body, roughness: 0.8, metalness: 0.1 });
 const shelfMaterial = new THREE.MeshStandardMaterial({ color: COLORS.shelf, roughness: 0.6 });
-const packMaterial = new THREE.MeshStandardMaterial({ color: COLORS.pack, roughness: 0.4 });
 const coverMaterial = new THREE.MeshStandardMaterial({ color: COLORS.cover, roughness: 0.5 });
 const chevronMaterial = new THREE.MeshStandardMaterial({ color: COLORS.chevron, roughness: 0.5 });
+const addProjectMaterial = new THREE.MeshStandardMaterial({ color: COLORS.addProject, roughness: 0.6 });
+const addPackMaterial = new THREE.MeshStandardMaterial({ color: COLORS.addPack, roughness: 0.5 });
 
-function addBox(width, height, depth, material, x, y, z, parent = scene) {
+const contentGroup = new THREE.Group();
+scene.add(contentGroup);
+
+function clearGroup(group) {
+  while (group.children.length) {
+    const child = group.children.pop();
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (child.material.map) child.material.map.dispose();
+      child.material.dispose();
+    }
+  }
+}
+
+function addBox(width, height, depth, material, x, y, z, parent = contentGroup) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(x, y, z);
   parent.add(mesh);
@@ -128,7 +306,7 @@ function createLogoTexture() {
     ctx.shadowBlur = 40;
     ctx.fillStyle = '#59e816';
     ctx.fillText('SMOKER', w / 2, h / 2);
-    ctx.fillText('SMOKER', w / 2, h / 2); // second pass builds up a stronger glow
+    ctx.fillText('SMOKER', w / 2, h / 2);
   }, 900, 220);
 }
 
@@ -142,15 +320,31 @@ function createIconTexture(emoji) {
   }, 128, 128);
 }
 
-function addPlane(width, height, texture, x, y, z) {
+function createLabelTexture(text) {
+  return createCanvasTexture((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = 'bold 44px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#1c1c1e';
+    const words = text.split(' ');
+    if (words.length > 1 && text.length > 12) {
+      ctx.fillText(words.slice(0, Math.ceil(words.length / 2)).join(' '), w / 2, h / 2 - 26);
+      ctx.fillText(words.slice(Math.ceil(words.length / 2)).join(' '), w / 2, h / 2 + 26);
+    } else {
+      ctx.fillText(text, w / 2, h / 2);
+    }
+  }, 512, 200);
+}
+
+function addPlane(width, height, texture, x, y, z, parent = contentGroup) {
   const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
   mesh.position.set(x, y, z);
-  scene.add(mesh);
+  parent.add(mesh);
   return mesh;
 }
 
-// Solid triangular chevron, `pointsLeft` controls which way it points.
 function addChevron(pointsLeft, x, y, z) {
   const shape = new THREE.Shape();
   const halfCw = CHEVRON_WIDTH / 2;
@@ -169,75 +363,145 @@ function addChevron(pointsLeft, x, y, z) {
   geometry.translate(0, 0, -CHEVRON_DEPTH / 2);
   const mesh = new THREE.Mesh(geometry, chevronMaterial);
   mesh.position.set(x, y, z);
-  scene.add(mesh);
+  contentGroup.add(mesh);
   return mesh;
 }
 
-// Flat colored icon button (edit/delete), with an emoji glyph on its front face.
-function addIconButton(color, emoji, x, y, z) {
-  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+function addIconButton(material, emoji, x, y, z) {
   const mesh = addBox(ICON_BUTTON_SIZE, ICON_BUTTON_SIZE, CHEVRON_DEPTH, material, x, y, z);
   const iconTexture = createIconTexture(emoji);
   addPlane(ICON_BUTTON_SIZE * 0.8, ICON_BUTTON_SIZE * 0.8, iconTexture, x, y, z + CHEVRON_DEPTH / 2 + 1);
   return mesh;
 }
 
-// ---- Main body: back block + 4 front frame strips around the cavity opening ----
-const backBlockDepth = cavityBackZ - -halfD;
-addBox(BODY_WIDTH, BODY_HEIGHT, backBlockDepth, bodyMaterial, 0, 0, -halfD + backBlockDepth / 2);
+// ================================================================
+// Data + scene building
+// ================================================================
+let currentProjects = [];
+let currentTestsByProject = new Map();
+let cameraInitialized = false;
 
-const frameDepth = cavityFrontZ - cavityBackZ;
-const frameCenterZ = (cavityBackZ + cavityFrontZ) / 2;
+let swingingCovers = []; // { group, mesh, isOpen, animStart, animFrom, animTo }
+let interactables = []; // { mesh, onClick }
+let pulseables = []; // { mesh, scale }
+let openCoverEntry = null;
 
-// top strip
-addBox(BODY_WIDTH, halfH - cavityTop, frameDepth, bodyMaterial, 0, (cavityTop + halfH) / 2, frameCenterZ);
-// bottom strip
-addBox(BODY_WIDTH, cavityBottom - -halfH, frameDepth, bodyMaterial, 0, (-halfH + cavityBottom) / 2, frameCenterZ);
-// left strip
-addBox(cavityLeft - -halfW, cavityTop - cavityBottom, frameDepth, bodyMaterial, (-halfW + cavityLeft) / 2, (cavityTop + cavityBottom) / 2, frameCenterZ);
-// right strip
-addBox(halfW - cavityRight, cavityTop - cavityBottom, frameDepth, bodyMaterial, (cavityRight + halfW) / 2, (cavityTop + cavityBottom) / 2, frameCenterZ);
+async function loadAndBuild() {
+  try {
+    const [projects, tests] = await Promise.all([window.api.listProjects(), window.api.listSmokeTests()]);
+    currentProjects = projects;
+    currentTestsByProject = new Map(projects.map((p) => [p.id, tests.filter((t) => t.projectId === p.id)]));
+    buildScene();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
 
-// ---- Logo: placed above the topmost ("first", reading top-down) section cover ----
-const logoTexture = createLogoTexture();
-addPlane(500, 122, logoTexture, 0, (cavityTop + halfH) / 2, cavityFrontZ + 1);
+function layoutPacks(count) {
+  let packWidth = PACK_WIDTH_DEFAULT;
+  const maxUsable = SHELF_WIDTH * 0.92;
+  if (count * packWidth > maxUsable) {
+    packWidth = Math.max(PACK_MIN_WIDTH, maxUsable / count);
+  }
+  const gap = (SHELF_WIDTH - count * packWidth) / (count + 1);
+  return { packWidth, gap };
+}
 
-// ---- Rows: shelf + packs + swinging cover + side controls, stacked bottom-up ----
-const swingingCovers = []; // { group, mesh, isOpen, animStart, animFrom, animTo }
-const pulseables = []; // { mesh, scale: current pulse scale }
+function buildScene() {
+  clearGroup(contentGroup);
+  swingingCovers = [];
+  interactables = [];
+  pulseables = [];
+  openCoverEntry = null;
 
-for (let row = 0; row < SHELF_COUNT; row++) {
+  const rowCount = currentProjects.length + 1; // +1 for the trailing "add project" row
+  const cavityHeight = rowCount * ROW_PITCH - ROW_GAP;
+  const bodyHeight = HEADER_SPACE + cavityHeight + FOOTER_SPACE;
+  const halfH = bodyHeight / 2;
+  const cavityBottom = -halfH + FOOTER_SPACE;
+  const cavityTop = cavityBottom + cavityHeight;
+
+  // ---- Main body: back block + 4 front frame strips around the cavity opening ----
+  const backBlockDepth = cavityBackZ - -halfD;
+  addBox(BODY_WIDTH, bodyHeight, backBlockDepth, bodyMaterial, 0, 0, -halfD + backBlockDepth / 2);
+
+  const frameDepth = cavityFrontZ - cavityBackZ;
+  const frameCenterZ = (cavityBackZ + cavityFrontZ) / 2;
+  addBox(BODY_WIDTH, halfH - cavityTop, frameDepth, bodyMaterial, 0, (cavityTop + halfH) / 2, frameCenterZ);
+  addBox(BODY_WIDTH, cavityBottom - -halfH, frameDepth, bodyMaterial, 0, (-halfH + cavityBottom) / 2, frameCenterZ);
+  addBox(cavityLeft - -halfW, cavityTop - cavityBottom, frameDepth, bodyMaterial, (-halfW + cavityLeft) / 2, (cavityTop + cavityBottom) / 2, frameCenterZ);
+  addBox(halfW - cavityRight, cavityTop - cavityBottom, frameDepth, bodyMaterial, (cavityRight + halfW) / 2, (cavityTop + cavityBottom) / 2, frameCenterZ);
+
+  // ---- Logo above the topmost cover ----
+  addPlane(500, 122, createLogoTexture(), 0, (cavityTop + halfH) / 2, cavityFrontZ + 1);
+
+  // ---- One row per project ----
+  currentProjects.forEach((project, row) => {
+    buildRow(row, cavityBottom, project, currentTestsByProject.get(project.id) || []);
+  });
+
+  // ---- Trailing "add project" row ----
+  buildAddProjectRow(currentProjects.length, cavityBottom);
+
+  // ---- Camera: only positioned on the very first build, so edits don't reset the user's view ----
+  if (!cameraInitialized) {
+    const distance = Math.max(1800, bodyHeight * 1.3);
+    camera.position.set(BODY_WIDTH, 150, distance);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    cameraInitialized = true;
+  }
+}
+
+function buildRow(row, cavityBottom, project, tests) {
   const rowBottom = cavityBottom + row * ROW_PITCH;
-  const rowTop = rowBottom + COVER_HEIGHT;
   const rowCenterY = rowBottom + COVER_HEIGHT / 2;
-
-  // Shelf: centered in the cavity's depth range
   const shelfCenterZ = cavityBackZ + INDENT_DEPTH / 2;
+
   addBox(SHELF_WIDTH, SHELF_HEIGHT, SHELF_DEPTH, shelfMaterial, 0, rowBottom + SHELF_HEIGHT / 2, shelfCenterZ);
 
-  // Packs: sit on top of the shelf, evenly spaced across the shelf width
-  const packsTotalWidth = PACKS_PER_SHELF * PACK_WIDTH;
-  const gap = (SHELF_WIDTH - packsTotalWidth) / (PACKS_PER_SHELF + 1);
+  const packCount = tests.length + 1; // +1 for the trailing "add test plan" pack
+  const { packWidth, gap } = layoutPacks(packCount);
   const packCenterY = rowBottom + SHELF_HEIGHT + PACK_HEIGHT / 2;
-  for (let i = 0; i < PACKS_PER_SHELF; i++) {
-    const packLeftEdge = -SHELF_WIDTH / 2 + gap * (i + 1) + PACK_WIDTH * i;
-    const packCenterX = packLeftEdge + PACK_WIDTH / 2;
-    addBox(PACK_WIDTH, PACK_HEIGHT, PACK_DEPTH, packMaterial, packCenterX, packCenterY, shelfCenterZ);
+
+  for (let i = 0; i < packCount; i++) {
+    const leftEdge = -SHELF_WIDTH / 2 + gap * (i + 1) + packWidth * i;
+    const centerX = leftEdge + packWidth / 2;
+    const isAddPack = i === tests.length;
+    const material = isAddPack
+      ? addPackMaterial
+      : new THREE.MeshStandardMaterial({ color: PACK_COLORS[i % PACK_COLORS.length], roughness: 0.4 });
+    const packMesh = addBox(packWidth, PACK_HEIGHT, PACK_DEPTH, material, centerX, packCenterY, shelfCenterZ);
+
+    if (isAddPack) {
+      const plusTexture = createLabelTexture('+ Add Test Plan');
+      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), plusTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1);
+      interactables.push({ mesh: packMesh, onClick: () => addTestPlanFlow(project) });
+    } else {
+      const test = tests[i];
+      const labelTexture = createLabelTexture(test.name);
+      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), labelTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1);
+      const color = PACK_COLORS[i % PACK_COLORS.length];
+      interactables.push({ mesh: packMesh, onClick: () => openActionPanel(test, color) });
+    }
   }
 
-  // Cover: hinged at its BOTTOM edge (rowBottom), swings up and forward when opened
+  // Cover: hinged at its bottom edge, swings up and forward when opened
   const coverClosedCenterZ = cavityFrontZ - COVER_DEPTH / 2;
   const hinge = new THREE.Group();
   hinge.position.set(0, rowBottom, coverClosedCenterZ);
-  scene.add(hinge);
-
+  contentGroup.add(hinge);
   const coverMesh = new THREE.Mesh(new THREE.BoxGeometry(COVER_WIDTH, COVER_HEIGHT, COVER_DEPTH), coverMaterial);
   coverMesh.position.set(0, COVER_HEIGHT / 2, 0);
   hinge.add(coverMesh);
+  const coverLabel = createLabelTexture(project.name);
+  addPlane(COVER_WIDTH * 0.6, COVER_WIDTH * 0.6 * (200 / 512), coverLabel, 0, COVER_HEIGHT / 2, COVER_DEPTH / 2 + 1, hinge);
 
-  swingingCovers.push({ group: hinge, mesh: coverMesh, isOpen: false, animStart: 0, animFrom: 0, animTo: 0 });
+  const coverEntry = { group: hinge, mesh: coverMesh, isOpen: false, animStart: 0, animFrom: 0, animTo: 0 };
+  swingingCovers.push(coverEntry);
+  interactables.push({ mesh: coverMesh, onClick: () => toggleCover(coverEntry) });
 
-  // Side controls: chevrons flank the row, edit/delete sit further outward on each side
+  // Side controls: chevrons flank the row, edit/delete sit further outward
   const sideZ = coverClosedCenterZ;
   const leftChevronX = -(halfW + SIDE_GAP + CHEVRON_WIDTH / 2);
   const rightChevronX = halfW + SIDE_GAP + CHEVRON_WIDTH / 2;
@@ -246,18 +510,51 @@ for (let row = 0; row < SHELF_COUNT; row++) {
 
   const leftChevron = addChevron(true, leftChevronX, rowCenterY, sideZ);
   const rightChevron = addChevron(false, rightChevronX, rowCenterY, sideZ);
-  const editBtn = addIconButton(COLORS.edit, '✏️', editX, rowCenterY, sideZ);
-  const deleteBtn = addIconButton(COLORS.delete, '🗑️', deleteX, rowCenterY, sideZ);
+  const editMaterial = new THREE.MeshStandardMaterial({ color: COLORS.edit, roughness: 0.5 });
+  const deleteMaterial = new THREE.MeshStandardMaterial({ color: COLORS.delete, roughness: 0.5 });
+  const editBtn = addIconButton(editMaterial, '✏️', editX, rowCenterY, sideZ);
+  const deleteBtn = addIconButton(deleteMaterial, '🗑️', deleteX, rowCenterY, sideZ);
 
-  pulseables.push(
-    { mesh: leftChevron, scale: 1 },
-    { mesh: rightChevron, scale: 1 },
-    { mesh: editBtn, scale: 1 },
-    { mesh: deleteBtn, scale: 1 },
-  );
+  pulseables.push({ mesh: leftChevron, scale: 1 }, { mesh: rightChevron, scale: 1 });
+  interactables.push({ mesh: leftChevron, onClick: () => pulse(leftChevron) });
+  interactables.push({ mesh: rightChevron, onClick: () => pulse(rightChevron) });
+  pulseables.push({ mesh: editBtn, scale: 1 }, { mesh: deleteBtn, scale: 1 });
+  interactables.push({ mesh: editBtn, onClick: () => { pulse(editBtn); renameProjectFlow(project); } });
+  interactables.push({ mesh: deleteBtn, onClick: () => { pulse(deleteBtn); deleteProjectFlow(project); } });
 }
 
-// ---- Click interaction ----
+function buildAddProjectRow(row, cavityBottom) {
+  const rowBottom = cavityBottom + row * ROW_PITCH;
+  const coverClosedCenterZ = cavityFrontZ - COVER_DEPTH / 2;
+  const mesh = addBox(COVER_WIDTH, COVER_HEIGHT, COVER_DEPTH, addProjectMaterial, 0, rowBottom + COVER_HEIGHT / 2, coverClosedCenterZ);
+  const label = createLabelTexture('+ Add New Project');
+  addPlane(COVER_WIDTH * 0.6, COVER_WIDTH * 0.6 * (200 / 512), label, 0, rowBottom + COVER_HEIGHT / 2, coverClosedCenterZ + COVER_DEPTH / 2 + 1);
+  interactables.push({ mesh, onClick: () => createProjectFlow() });
+}
+
+function toggleCover(coverEntry) {
+  const now = performance.now();
+  if (openCoverEntry && openCoverEntry !== coverEntry) {
+    openCoverEntry.animFrom = openCoverEntry.group.rotation.x;
+    openCoverEntry.isOpen = false;
+    openCoverEntry.animTo = 0;
+    openCoverEntry.animStart = now;
+  }
+  coverEntry.animFrom = coverEntry.group.rotation.x;
+  coverEntry.isOpen = !coverEntry.isOpen;
+  coverEntry.animTo = coverEntry.isOpen ? OPEN_ANGLE : 0;
+  coverEntry.animStart = now;
+  openCoverEntry = coverEntry.isOpen ? coverEntry : null;
+}
+
+function pulse(mesh) {
+  const entry = pulseables.find((p) => p.mesh === mesh);
+  if (entry) entry.scale = 1.25;
+}
+
+// ================================================================
+// Click interaction
+// ================================================================
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
@@ -266,29 +563,19 @@ renderer.domElement.addEventListener('click', (event) => {
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
 
-  const coverHit = raycaster.intersectObjects(swingingCovers.map((c) => c.mesh));
-  if (coverHit.length > 0) {
-    const cover = swingingCovers.find((c) => c.mesh === coverHit[0].object);
-    const now = performance.now();
-    cover.animFrom = cover.group.rotation.x;
-    cover.isOpen = !cover.isOpen;
-    cover.animTo = cover.isOpen ? OPEN_ANGLE : 0;
-    cover.animStart = now;
-    return;
-  }
-
-  const sideHit = raycaster.intersectObjects(pulseables.map((p) => p.mesh));
-  if (sideHit.length > 0) {
-    const entry = pulseables.find((p) => p.mesh === sideHit[0].object);
-    entry.scale = 1.25; // decays back to 1 in the render loop, just a click acknowledgment
-  }
+  const hit = raycaster.intersectObjects(interactables.map((e) => e.mesh));
+  if (hit.length === 0) return;
+  const entry = interactables.find((e) => e.mesh === hit[0].object);
+  entry.onClick();
 });
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-// ---- Render loop ----
+// ================================================================
+// Render loop
+// ================================================================
 function animate() {
   requestAnimationFrame(animate);
 
@@ -311,3 +598,6 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+
+window.addEventListener('focus', loadAndBuild);
+loadAndBuild();

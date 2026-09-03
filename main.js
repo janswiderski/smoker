@@ -83,20 +83,20 @@ function toFileUrl(filePath) {
 
 function createStartWindow() {
   startWindow = new BrowserWindow({
-    width: 820,
-    height: 880,
-    minWidth: 480,
+    width: 1200,
+    height: 900,
+    minWidth: 700,
     minHeight: 520,
     resizable: true,
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 20, y: 20 },
-    backgroundColor: '#3a3a3d',
+    backgroundColor: '#1c1c1e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
     },
   });
-  startWindow.loadFile(path.join(__dirname, 'src', 'start.html'));
+  startWindow.loadFile(path.join(__dirname, 'src', 'cabinet3d.html'));
 }
 
 function createOverlayWindow() {
