@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   getDataRoot: () => ipcRenderer.invoke('get-data-root'),
   chooseSharedDataRoot: () => ipcRenderer.invoke('choose-shared-data-root'),
   resetDataRoot: () => ipcRenderer.invoke('reset-data-root'),
-  createProject: (name) => ipcRenderer.invoke('create-project', name),
+  createProject: (name, slotIndex) => ipcRenderer.invoke('create-project', { name, slotIndex }),
   renameProject: (id, name) => ipcRenderer.invoke('rename-project', { id, name }),
   deleteProject: (id) => ipcRenderer.invoke('delete-project', id),
   chooseAddTestPlanMode: () => ipcRenderer.invoke('choose-add-test-plan-mode'),

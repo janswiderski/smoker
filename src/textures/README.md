@@ -12,7 +12,7 @@ window then use the app menu / refresh) to see it.
 | `cabinet-body.png` | Main cabinet body | All outer faces of the frame/back of the cabinet | One texture wraps all sides |
 | `shelf.png` | Shelf | Top surface each row of packs sits on | |
 | `cover.png` | Project cover | Front face of each shelf's swinging flap | |
-| `cover-add-project.png` | "+ Add New Project" cover | The dark cover at the top of the stack | |
+| `cover-add-project.png` | "+ Add New Project" cover | Any empty slot's cover — a project's row reverts to this when deleted | |
 | `pack.png` | Test plan pack | Every real test-plan "pack" box | Deliberately near-white/neutral — the app tints it a different color per pack (`material.color`), so keep this one light/neutral or the per-pack colors will look muddy |
 | `pack-add.png` | "+ Add Test Plan" pack | The trailing grey pack at the end of each shelf | |
 | `chevron.png` | Side chevron | The scroll arrows on either side of a shelf (only visible once a shelf has enough packs to need scrolling) | |
@@ -20,6 +20,9 @@ window then use the app menu / refresh) to see it.
 | `button-delete.png` | Delete button | The button to the right of the cabinet that deletes a project | |
 | `trash-can.png` | Trash can | The cylindrical prop to the right of the cabinet | |
 | `cardboard-box.png` | Cardboard box | The 3 stacked boxes to the left of the cabinet (all 3 share this one texture) | |
+| `wall.png` | Wall | Flat backdrop behind the whole scene | |
+| `sidewalk.png` | Sidewalk + curb | The ground plane everything rests on, and the raised lip at its front edge (shared texture) | |
+| `road.png` | Road | The street surface in front of the curb, one curb-height below the sidewalk | |
 
 All are loaded once via `THREE.TextureLoader` in `cabinet3d.js` and reused across every scene rebuild —
 no other code changes are needed to swap in new art.

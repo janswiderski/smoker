@@ -62,16 +62,21 @@ function ensureDirs() {
     }
   }
 
+  // Slots are either a project ({ id, name }) or an empty/reusable slot (null). The number of
+  // slots never shrinks — deleting a project just nulls out its slot instead of removing it, so
+  // the cabinet keeps its shelf count and the empty slot renders as an "Add Project" cover in
+  // that same row.
   const projects = readProjects();
-  if (projects.length === 0) return;
-  const validIds = new Set(projects.map((p) => p.id));
+  const firstRealProject = projects.find(Boolean);
+  if (!firstRealProject) return;
+  const validIds = new Set(projects.filter(Boolean).map((p) => p.id));
 
   for (const fileName of fs.readdirSync(smokeTestsDir)) {
     if (fileName === 'projects.json' || !fileName.endsWith('.json')) continue;
     const filePath = path.join(smokeTestsDir, fileName);
     const json = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     if (!validIds.has(json.projectId)) {
-      json.projectId = projects[0].id;
+      json.projectId = firstRealProject.id;
       fs.writeFileSync(filePath, JSON.stringify(json, null, 2));
     }
   }
@@ -365,22 +370,25 @@ ipcMain.handle('reset-data-root', () => {
   return { dataRoot: localUserDataDir };
 });
 
-ipcMain.handle('create-project', (_event, name) => {
+ipcMain.handle('create-project', (_event, { name, slotIndex }) => {
   const projects = readProjects();
+  if (slotIndex == null || slotIndex < 0 || slotIndex >= projects.length || projects[slotIndex] !== null) {
+    throw new Error('That slot is no longer available — someone may have just filled it.');
+  }
   let id = slugify(name);
   let suffix = 2;
-  while (projects.some((p) => p.id === id)) {
+  while (projects.some((p) => p && p.id === id)) {
     id = `${slugify(name)}-${suffix++}`;
   }
   const project = { id, name };
-  projects.push(project);
+  projects[slotIndex] = project;
   writeProjects(projects);
   return project;
 });
 
 ipcMain.handle('rename-project', (_event, { id, name }) => {
   const projects = readProjects();
-  const project = projects.find((p) => p.id === id);
+  const project = projects.find((p) => p && p.id === id);
   if (!project) throw new Error('Project not found.');
   project.name = name;
   writeProjects(projects);
@@ -389,8 +397,12 @@ ipcMain.handle('rename-project', (_event, { id, name }) => {
 
 ipcMain.handle('delete-project', (_event, id) => {
   const projects = readProjects();
-  const remaining = projects.filter((p) => p.id !== id);
-  writeProjects(remaining);
+  const index = projects.findIndex((p) => p && p.id === id);
+  if (index === -1) throw new Error('Project not found.');
+  // Null out the slot rather than removing it — the shelf count never shrinks, and the freed
+  // slot reappears as an "Add Project" cover in that same row.
+  projects[index] = null;
+  writeProjects(projects);
 
   for (const fileName of fs.readdirSync(smokeTestsDir)) {
     if (fileName === 'projects.json' || !fileName.endsWith('.json')) continue;

@@ -19,14 +19,15 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 - `src/cabinet3d.html` + `src/cabinet3d.js` — the main window: a Three.js scene for the cabinet, plus a handful of ordinary DOM overlay elements (action panel, rename/create-project prompt, error banner) layered on top of the canvas for anything that's just text and buttons.
 - `src/*.html` + `src/*.js` (the rest) — one pair per secondary window (see below), plain DOM/CSS, no build step.
 - `src/styles.css` — shared stylesheet for every window, including the DOM overlays inside `cabinet3d.html`.
-- `src/textures/*.png` — the surface texture for every 3D element (cabinet body, shelf, cover, packs, chevrons, buttons, trash can, cardboard boxes). See [`src/textures/README.md`](src/textures/README.md) for the file-to-element mapping — swap any of them out and reload to restyle that element.
+- `src/textures/*.png` — the surface texture for every 3D element (cabinet body, shelf, cover, packs, chevrons, buttons, trash can, cardboard boxes, wall, sidewalk, road). See [`src/textures/README.md`](src/textures/README.md) for the file-to-element mapping — swap any of them out and reload to restyle that element.
 - `lib/diff.js` — the `pixelmatch`/`pngjs` wrapper used to compare two screenshots and produce a highlighted diff image.
+- `exports/cabinet-scene.glb` — a manually-generated snapshot of the 3D scene (geometry + textures) for opening in Blender or another glTF-compatible tool. It's a one-off export, not something the app produces itself; regenerating it means re-adding a temporary `THREE.GLTFExporter` call and running it against a live instance.
 
 ### Windows
 
 | Window | Purpose |
 |---|---|
-| **Start window** (`cabinet3d.html`/`cabinet3d.js`) | The main menu — a real 3D cabinet scene, one shelf per project, cloned/resized to fit however many projects and test plans actually exist. Always open; the app's "home". |
+| **Start window** (`cabinet3d.html`/`cabinet3d.js`) | The main menu — a real 3D cabinet scene sitting on a small street backdrop (wall, sidewalk, curb, road), one shelf per project slot. Always open; the app's "home". |
 | **Overlay window** | The floating instructions + action-button panel shown while a test run is in progress. Frameless, always-on-top, transparent background. |
 | **Results window** | Per-test-plan run history, run detail, and the fullscreen baseline/diff comparison lightbox. |
 | **Editor window** | Raw-JSON + diff-threshold editor for a single test plan. |
@@ -78,7 +79,9 @@ On first launch, `smoke-tests/` is seeded from the bundled `smoke-tests/` folder
 ## Workflows
 
 ### Managing projects
-From the main menu (the 3D cabinet, orbit with drag / zoom with scroll): each project is a shelf with a colored cover. Click a cover to swing it open on its hinge (only one shelf open at a time — opening another closes whichever was open) and reveal its test plans as "packs" sitting on the shelf behind. Each row also has a chevron on either side and edit/delete buttons flanking the cabinet — edit prompts to rename that project, delete removes it and cascades (every test plan in it, plus their run history and baselines, after a confirmation naming the count). A dedicated dark cover at the top of the stack, "+ Add New Project," prompts for a name and creates a new empty project. The cabinet's height and the logo's position both adjust automatically as projects are added or removed. A cylindrical trash can and a stack of 3 cardboard boxes flank the cabinet as purely decorative props (not interactive).
+From the main menu, each project is a shelf with a colored cover. Click a cover to swing it open on its hinge (only one shelf open at a time — opening another closes whichever was open) and reveal its test plans as "packs" sitting on the shelf behind; the camera zooms in to frame whichever shelf is open, and pulls back out to its default view when you close it or open a different one. The camera is otherwise fixed — there's no drag-to-orbit or scroll-to-zoom. Each row also has a chevron on either side and edit/delete buttons flanking the cabinet — edit prompts to rename that project, delete removes it and cascades (every test plan in it, plus their run history and baselines, after a confirmation naming the count). A cylindrical trash can and a stack of 3 cardboard boxes flank the cabinet as purely decorative props (not interactive).
+
+The number of shelves is fixed once seeded — it never grows or shrinks automatically. Deleting a project doesn't remove its shelf; that slot's cover reverts to a dark "+ Add New Project" cover instead, right where it was. Clicking any such cover prompts for a name and fills that exact slot. Once every shelf is occupied by a real project, there's no "+ Add New Project" cover left anywhere and adding is effectively disabled until a project is deleted to free one up again — there's currently no way to grow the cabinet beyond its original shelf count.
 
 ### Managing test plans
 Inside an open project shelf, each test plan is a colored pack showing its name. Packs shrink to fit the shelf's width as more test plans are added; once they'd get uncomfortably small, the shelf switches to a fixed pack width and scrolls instead — the side chevrons appear only on shelves that actually need it, and click them to scroll the packs left/right. The last pack, "+ Add Test Plan," offers a choice:
@@ -107,5 +110,6 @@ The Results window (per test plan) lists past runs (`Run #N — <start time>`, w
 - **Download Collage** (per step) — composites Baseline / Test Run / Diff (whichever exist) stacked vertically, each labeled with its role and capture timestamp, into one PNG you save wherever you like.
 
 ## Known limitations
+- The cabinet's shelf count is fixed once seeded and never grows — see "Managing projects" above. There's no UI for expanding capacity; it would need new logic to add a shelf on demand.
 - Screenshot capture requires the OS to grant Smoker Screen Recording permission (macOS will prompt on first use).
 - See [`docs/windows-compatibility.md`](docs/windows-compatibility.md) for a full audit of what would need attention to run this on Windows — short version: no code should block it, one macOS-oriented overlay-window behavior degrades gracefully, and there's no packaging/build config yet for producing an actual `.exe`.

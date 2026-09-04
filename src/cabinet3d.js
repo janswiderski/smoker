@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // ================================================================
 // DOM overlay: error banner, action panel (per test plan), text prompt
@@ -166,12 +165,12 @@ textPromptOverlay.addEventListener('click', (e) => { if (e.target === textPrompt
 // ================================================================
 // Project/test-plan actions (mirror the 2D app's flows)
 // ================================================================
-async function createProjectFlow() {
+async function createProjectFlow(slotIndex) {
   const name = await promptForText('New project name:');
   if (!name || !name.trim()) return;
   showError('');
   try {
-    await window.api.createProject(name.trim());
+    await window.api.createProject(name.trim(), slotIndex);
     await loadAndBuild();
   } catch (err) {
     showError(err.message || String(err));
@@ -240,7 +239,6 @@ const SHELF_HEIGHT = 10;
 
 const PACK_HEIGHT = 100;
 const PACK_WIDTH_DEFAULT = 60;
-const PACK_MIN_WIDTH = 30;
 const PACK_DEPTH = 20;
 
 const COVER_WIDTH = 600;
@@ -259,7 +257,7 @@ const SIDE_GAP = 30;
 const SIDE_GAP_2 = 20;
 const ICON_BUTTON_SIZE = 70;
 
-const PACK_COMFORTABLE_MIN = 40; // below this, stop shrinking and switch to scrolling instead
+const MAX_PACKS_VISIBLE = 10; // packs shown at once before a shelf switches to scrolling
 const SCROLL_STEP = SHELF_WIDTH * 0.6;
 const SCROLL_DURATION_MS = 400;
 
@@ -269,6 +267,25 @@ const TRASH_RADIUS_BOTTOM = 76;
 const TRASH_HEIGHT = 220;
 const BOX_SIZE = 140;
 const BOX_HEIGHT = 120;
+
+const WALL_WIDTH = 2200;
+const WALL_HEIGHT = 1700;
+const WALL_DEPTH = 30;
+const WALL_GAP = 20; // gap between the cabinet's back face and the wall
+
+const SIDEWALK_WIDTH = 2200;
+const SIDEWALK_DEPTH = 900;
+const SIDEWALK_THICKNESS = 24;
+
+const CURB_HEIGHT = 30;
+const CURB_DEPTH = 20;
+
+const ROAD_WIDTH = 2200;
+const ROAD_DEPTH = 1200;
+const ROAD_THICKNESS = 20;
+
+const CAMERA_ZOOM_DISTANCE = 900; // how far from a shelf the camera sits once zoomed in
+const CAMERA_ZOOM_DURATION_MS = 700;
 
 const PACK_COLORS = ['#2f6fed', '#e0393e', '#2fae5c', '#a04fd6', '#e08a1e', '#1eb8b0', '#d6417a'];
 
@@ -291,9 +308,6 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -329,6 +343,9 @@ const TEX = {
   buttonDelete: loadTexture('button-delete.png'),
   trashCan: loadTexture('trash-can.png'),
   cardboardBox: loadTexture('cardboard-box.png'),
+  wall: loadTexture('wall.png'),
+  sidewalk: loadTexture('sidewalk.png'),
+  road: loadTexture('road.png'),
 };
 
 // Clips anything outside a shelf's own width — lets packs scroll "through" the shelf edges.
@@ -347,6 +364,9 @@ const editMaterial = new THREE.MeshStandardMaterial({ map: TEX.buttonEdit, rough
 const deleteMaterial = new THREE.MeshStandardMaterial({ map: TEX.buttonDelete, roughness: 0.5 });
 const trashCanMaterial = new THREE.MeshStandardMaterial({ map: TEX.trashCan, roughness: 0.6, metalness: 0.2 });
 const cardboardBoxMaterial = new THREE.MeshStandardMaterial({ map: TEX.cardboardBox, roughness: 0.9 });
+const wallMaterial = new THREE.MeshStandardMaterial({ map: TEX.wall, roughness: 0.9 });
+const sidewalkMaterial = new THREE.MeshStandardMaterial({ map: TEX.sidewalk, roughness: 0.85 });
+const roadMaterial = new THREE.MeshStandardMaterial({ map: TEX.road, roughness: 0.75 });
 
 const contentGroup = new THREE.Group();
 scene.add(contentGroup);
@@ -457,9 +477,13 @@ function addIconButton(material, x, y, z) {
 // ================================================================
 // Data + scene building
 // ================================================================
-let currentProjects = [];
+let currentProjects = []; // slot array: a project { id, name } or null for an empty/"Add Project" slot
 let currentTestsByProject = new Map();
 let cameraInitialized = false;
+let defaultCameraPos = null;
+let defaultCameraTarget = null;
+let currentCameraTarget = new THREE.Vector3(0, 0, 0);
+let cameraAnim = null; // { fromPos, toPos, fromTarget, toTarget, animStart }
 
 let swingingCovers = []; // { group, mesh, isOpen, animStart, animFrom, animTo }
 let scrollingRows = []; // { group, min, max, target, animFrom, animStart }
@@ -471,7 +495,9 @@ async function loadAndBuild() {
   try {
     const [projects, tests] = await Promise.all([window.api.listProjects(), window.api.listSmokeTests()]);
     currentProjects = projects;
-    currentTestsByProject = new Map(projects.map((p) => [p.id, tests.filter((t) => t.projectId === p.id)]));
+    currentTestsByProject = new Map(
+      projects.filter(Boolean).map((p) => [p.id, tests.filter((t) => t.projectId === p.id)])
+    );
     buildScene();
   } catch (err) {
     showError(err.message || String(err));
@@ -479,20 +505,18 @@ async function loadAndBuild() {
 }
 
 function layoutPacks(count) {
-  let packWidth = PACK_WIDTH_DEFAULT;
-  const maxUsable = SHELF_WIDTH * 0.92;
-  if (count * packWidth > maxUsable) {
-    packWidth = maxUsable / count;
+  if (count <= MAX_PACKS_VISIBLE) {
+    let packWidth = PACK_WIDTH_DEFAULT;
+    const maxUsable = SHELF_WIDTH * 0.92;
+    if (count * packWidth > maxUsable) packWidth = maxUsable / count;
+    const gap = (SHELF_WIDTH - count * packWidth) / (count + 1);
+    return { packWidth, gap, scrollable: false };
   }
-  if (packWidth < PACK_COMFORTABLE_MIN) {
-    // Too many packs to shrink-to-fit comfortably — hold a readable fixed width
-    // and let the shelf scroll (via the side chevrons) instead of shrinking further.
-    const fixedWidth = PACK_COMFORTABLE_MIN;
-    const gap = fixedWidth * 0.3;
-    return { packWidth: fixedWidth, gap, scrollable: true };
-  }
-  const gap = (SHELF_WIDTH - count * packWidth) / (count + 1);
-  return { packWidth, gap, scrollable: false };
+  // More packs than fit comfortably — hold a fixed width sized so exactly
+  // MAX_PACKS_VISIBLE show at once, and scroll (via the side chevrons) for the rest.
+  const packWidth = (SHELF_WIDTH * 0.92) / MAX_PACKS_VISIBLE;
+  const gap = packWidth * 0.3;
+  return { packWidth, gap, scrollable: true };
 }
 
 function scrollRow(entry, delta) {
@@ -509,12 +533,18 @@ function buildScene() {
   pulseables = [];
   openCoverEntry = null;
 
-  const rowCount = currentProjects.length + 1; // +1 for the trailing "add project" row
+  // Slot count is fixed once seeded — it never shrinks (a deleted project's slot becomes an
+  // empty "Add Project" slot instead of being removed) and never grows automatically either
+  // (filling the last empty slot just disables further adds until one frees up again).
+  const rowCount = Math.max(1, currentProjects.length);
   const cavityHeight = rowCount * ROW_PITCH - ROW_GAP;
   const bodyHeight = HEADER_SPACE + cavityHeight + FOOTER_SPACE;
   const halfH = bodyHeight / 2;
   const cavityBottom = -halfH + FOOTER_SPACE;
   const cavityTop = cavityBottom + cavityHeight;
+
+  // ---- Street scene backdrop: wall, sidewalk + curb, road ----
+  buildStreetScene(halfH);
 
   // ---- Main body: back block + 4 front frame strips around the cavity opening ----
   const backBlockDepth = cavityBackZ - -halfD;
@@ -530,25 +560,31 @@ function buildScene() {
   // ---- Logo above the topmost cover ----
   addPlane(500, 122, createLogoTexture(), 0, (cavityTop + halfH) / 2, cavityFrontZ + 1);
 
-  // ---- One row per project ----
-  currentProjects.forEach((project, row) => {
-    buildRow(row, cavityBottom, project, currentTestsByProject.get(project.id) || []);
+  // ---- One row per slot: a real project, or an empty "Add Project" slot ----
+  currentProjects.forEach((slot, row) => {
+    if (slot) {
+      buildRow(row, cavityBottom, slot, currentTestsByProject.get(slot.id) || []);
+    } else {
+      buildAddProjectRow(row, cavityBottom);
+    }
   });
-
-  // ---- Trailing "add project" row ----
-  buildAddProjectRow(currentProjects.length, cavityBottom);
 
   // ---- Decorative props: trash can (right), stacked cardboard boxes (left) ----
   buildProps(halfH);
 
-  // ---- Camera: only positioned on the very first build, so edits don't reset the user's view ----
+  // ---- Camera: default position/target computed once (the cabinet's size is now fixed), then
+  // reset to it on every build — rebuilds already reset every cover to closed, so the camera
+  // returning to default alongside them is consistent, not just on an explicit close click.
   if (!cameraInitialized) {
     const distance = Math.max(1800, bodyHeight * 1.3);
-    camera.position.set(BODY_WIDTH, 150, distance);
-    controls.target.set(0, 0, 0);
-    controls.update();
+    defaultCameraPos = new THREE.Vector3(BODY_WIDTH, 150, distance);
+    defaultCameraTarget = new THREE.Vector3(0, 0, 0);
     cameraInitialized = true;
   }
+  cameraAnim = null;
+  camera.position.copy(defaultCameraPos);
+  currentCameraTarget.copy(defaultCameraTarget);
+  camera.lookAt(currentCameraTarget);
 }
 
 function buildRow(row, cavityBottom, project, tests) {
@@ -605,7 +641,16 @@ function buildRow(row, cavityBottom, project, tests) {
   const coverLabel = createLabelTexture(project.name);
   addPlane(COVER_WIDTH * 0.6, COVER_WIDTH * 0.6 * (200 / 512), coverLabel, 0, COVER_HEIGHT / 2, COVER_DEPTH / 2 + 1, hinge);
 
-  const coverEntry = { group: hinge, mesh: coverMesh, isOpen: false, animStart: 0, animFrom: 0, animTo: 0 };
+  const coverEntry = {
+    group: hinge,
+    mesh: coverMesh,
+    isOpen: false,
+    animStart: 0,
+    animFrom: 0,
+    animTo: 0,
+    focusPos: new THREE.Vector3(BODY_WIDTH * 0.35, rowCenterY, coverClosedCenterZ + CAMERA_ZOOM_DISTANCE),
+    focusTarget: new THREE.Vector3(0, rowCenterY, coverClosedCenterZ),
+  };
   swingingCovers.push(coverEntry);
   interactables.push({ mesh: coverMesh, onClick: () => toggleCover(coverEntry) });
 
@@ -631,6 +676,25 @@ function buildRow(row, cavityBottom, project, tests) {
   pulseables.push({ mesh: editBtn, scale: 1 }, { mesh: deleteBtn, scale: 1 });
   interactables.push({ mesh: editBtn, onClick: () => { pulse(editBtn); renameProjectFlow(project); } });
   interactables.push({ mesh: deleteBtn, onClick: () => { pulse(deleteBtn); deleteProjectFlow(project); } });
+}
+
+function buildStreetScene(halfH) {
+  // Wall: flat backdrop behind the cabinet, bottom flush with the sidewalk.
+  const wallBackZ = -halfD - WALL_GAP - WALL_DEPTH / 2;
+  addBox(WALL_WIDTH, WALL_HEIGHT, WALL_DEPTH, wallMaterial, 0, -halfH + WALL_HEIGHT / 2, wallBackZ);
+
+  // Sidewalk: the ground plane everything else rests on (top surface at -halfH).
+  const sidewalkBackZ = -halfD - WALL_GAP;
+  const sidewalkFrontZ = sidewalkBackZ + SIDEWALK_DEPTH;
+  addBox(SIDEWALK_WIDTH, SIDEWALK_THICKNESS, SIDEWALK_DEPTH, sidewalkMaterial, 0, -halfH - SIDEWALK_THICKNESS / 2, sidewalkBackZ + SIDEWALK_DEPTH / 2);
+
+  // Curb: raised lip at the sidewalk's front edge, stepping down to road level.
+  addBox(SIDEWALK_WIDTH, CURB_HEIGHT, CURB_DEPTH, sidewalkMaterial, 0, -halfH - CURB_HEIGHT / 2, sidewalkFrontZ + CURB_DEPTH / 2);
+
+  // Road: one curb-height lower than the sidewalk, extending further toward the camera.
+  const roadBackZ = sidewalkFrontZ + CURB_DEPTH;
+  const roadTopY = -halfH - CURB_HEIGHT;
+  addBox(ROAD_WIDTH, ROAD_THICKNESS, ROAD_DEPTH, roadMaterial, 0, roadTopY - ROAD_THICKNESS / 2, roadBackZ + ROAD_DEPTH / 2);
 }
 
 function buildProps(halfH) {
@@ -661,7 +725,7 @@ function buildAddProjectRow(row, cavityBottom) {
   const mesh = addBox(COVER_WIDTH, COVER_HEIGHT, COVER_DEPTH, addProjectMaterial, 0, rowBottom + COVER_HEIGHT / 2, coverClosedCenterZ);
   const label = createLabelTexture('+ Add New Project');
   addPlane(COVER_WIDTH * 0.6, COVER_WIDTH * 0.6 * (200 / 512), label, 0, rowBottom + COVER_HEIGHT / 2, coverClosedCenterZ + COVER_DEPTH / 2 + 1);
-  interactables.push({ mesh, onClick: () => createProjectFlow() });
+  interactables.push({ mesh, onClick: () => createProjectFlow(row) });
 }
 
 function toggleCover(coverEntry) {
@@ -677,6 +741,16 @@ function toggleCover(coverEntry) {
   coverEntry.animTo = coverEntry.isOpen ? OPEN_ANGLE : 0;
   coverEntry.animStart = now;
   openCoverEntry = coverEntry.isOpen ? coverEntry : null;
+
+  const toPos = openCoverEntry ? openCoverEntry.focusPos : defaultCameraPos;
+  const toTarget = openCoverEntry ? openCoverEntry.focusTarget : defaultCameraTarget;
+  cameraAnim = {
+    fromPos: camera.position.clone(),
+    toPos: toPos.clone(),
+    fromTarget: currentCameraTarget.clone(),
+    toTarget: toTarget.clone(),
+    animStart: now,
+  };
 }
 
 function pulse(mesh) {
@@ -733,7 +807,15 @@ function animate() {
     }
   }
 
-  controls.update();
+  if (cameraAnim) {
+    const t = Math.min(1, (now - cameraAnim.animStart) / CAMERA_ZOOM_DURATION_MS);
+    const eased = easeInOutCubic(t);
+    camera.position.lerpVectors(cameraAnim.fromPos, cameraAnim.toPos, eased);
+    currentCameraTarget.lerpVectors(cameraAnim.fromTarget, cameraAnim.toTarget, eased);
+    if (t >= 1) cameraAnim = null;
+  }
+  camera.lookAt(currentCameraTarget);
+
   renderer.render(scene, camera);
 }
 animate();
