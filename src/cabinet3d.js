@@ -79,6 +79,58 @@ actionDeleteBtn.addEventListener('click', async () => {
   await loadAndBuild();
 });
 
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsOverlay = document.getElementById('settingsOverlay');
+const settingsCurrentRoot = document.getElementById('settingsCurrentRoot');
+const settingsChooseBtn = document.getElementById('settingsChooseBtn');
+const settingsRevealBtn = document.getElementById('settingsRevealBtn');
+const settingsResetBtn = document.getElementById('settingsResetBtn');
+const settingsCancelBtn = document.getElementById('settingsCancelBtn');
+let currentDataRoot = null;
+
+async function openSettingsPanel() {
+  showError('');
+  try {
+    const { dataRoot, isShared } = await window.api.getDataRoot();
+    currentDataRoot = dataRoot;
+    settingsCurrentRoot.innerHTML = `<span class="settings-badge ${isShared ? 'shared' : 'local'}">${isShared ? 'SHARED' : 'LOCAL ONLY'}</span><br>${dataRoot}`;
+    settingsResetBtn.style.display = isShared ? '' : 'none';
+    settingsOverlay.style.display = 'flex';
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+function closeSettingsPanel() {
+  settingsOverlay.style.display = 'none';
+}
+settingsBtn.addEventListener('click', openSettingsPanel);
+settingsCancelBtn.addEventListener('click', closeSettingsPanel);
+settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettingsPanel(); });
+settingsRevealBtn.addEventListener('click', () => {
+  if (currentDataRoot) window.api.openPath(currentDataRoot);
+});
+settingsChooseBtn.addEventListener('click', async () => {
+  showError('');
+  try {
+    const result = await window.api.chooseSharedDataRoot();
+    if (result) {
+      settingsCurrentRoot.innerHTML = `<span class="settings-badge shared">SHARED</span><br>Restarting…`;
+    }
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+});
+settingsResetBtn.addEventListener('click', async () => {
+  if (!window.confirm('Switch back to this Mac\'s local (non-shared) data folder? The app will restart.')) return;
+  showError('');
+  try {
+    await window.api.resetDataRoot();
+    settingsCurrentRoot.innerHTML = `<span class="settings-badge local">LOCAL ONLY</span><br>Restarting…`;
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+});
+
 const textPromptOverlay = document.getElementById('textPromptOverlay');
 const textPromptTitle = document.getElementById('textPromptTitle');
 const textPromptInput = document.getElementById('textPromptInput');

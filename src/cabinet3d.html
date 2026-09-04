@@ -14,6 +14,22 @@
   <div id="dragStrip"></div>
   <div id="error" class="error-banner floating" style="display:none;"></div>
 
+  <button id="settingsBtn" class="settings-gear" title="Shared data folder">⚙</button>
+
+  <div id="settingsOverlay" class="action-overlay" style="display:none;">
+    <div class="prompt-panel">
+      <h3>Shared Data Folder</h3>
+      <p class="settings-hint">Point every teammate's app at the same synced folder (Dropbox, Google Drive, a network share) to share projects, test plans, and run history. Changing this restarts the app.</p>
+      <div id="settingsCurrentRoot" class="settings-current"></div>
+      <div class="action-buttons">
+        <button id="settingsChooseBtn" class="primary">Choose Shared Folder…</button>
+        <button id="settingsRevealBtn" class="secondary">Reveal in Finder</button>
+        <button id="settingsResetBtn" class="secondary danger-outline">Use Local Only</button>
+        <button id="settingsCancelBtn" class="secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="actionOverlay" class="action-overlay" style="display:none;">
     <div class="action-panel">
       <div class="action-panel-notch"></div>

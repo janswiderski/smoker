@@ -32,9 +32,15 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 | **Editor window** | Raw-JSON + diff-threshold editor for a single test plan. |
 | **Baseline preview window** | Shows a step's stored baseline image full-size, opened from the overlay's "View Baseline" button. |
 
+## Sharing data across a team
+
+By default every install's projects, test plans, and run history live only on that machine. The gear icon (bottom-right of the main window) lets you point the app at a folder everyone syncs instead — Dropbox, Google Drive, a network share — so projects, test plans, and run history (baselines, screenshots, diffs) are the same for everyone. The first person to point at an empty shared folder seeds it with the same starter content a fresh local install gets; after that, whatever's in the folder is what everyone sees. Changing the folder restarts the app; "Use Local Only" switches back to this machine's private copy without touching either copy's files.
+
+This is a cheap stand-in for a real shared backend, not a replacement for one: there's no locking, so two people editing projects (renaming, deleting) at the exact same instant can clobber each other's write — low risk for a small team using it sequentially, but a real one under heavier concurrent use. It also means running two copies of the app against the same folder at once (e.g. while testing) is genuinely unsafe for the same reason.
+
 ## Data model
 
-Everything lives under Electron's per-OS user data directory (macOS: `~/Library/Application Support/Smoker`):
+Everything lives under a data root — by default Electron's per-OS user data directory (macOS: `~/Library/Application Support/Smoker`), or the shared folder chosen via the gear icon:
 
 ```
 smoke-tests/

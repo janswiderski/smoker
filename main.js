@@ -8,9 +8,33 @@ app.setName('Smoker');
 
 const DEFAULT_MISMATCH_THRESHOLD_PERCENT = 0.1;
 
-const userDataDir = app.getPath('userData');
-const smokeTestsDir = path.join(userDataDir, 'smoke-tests');
-const dataDir = path.join(userDataDir, 'data');
+// The data root is normally this machine's private Electron userData folder. Pointing it at a
+// folder synced by everyone on the team (Dropbox, Google Drive, a network share, etc.) — via the
+// gear icon in the app — makes projects, test plans, and run history shared instead of local.
+// This is a cheap stand-in for a real shared backend: no server to run, but concurrent writers
+// can occasionally clobber each other (e.g. two people renaming a project at the same instant).
+const localUserDataDir = app.getPath('userData');
+const dataRootConfigFile = path.join(localUserDataDir, 'data-root.json');
+
+function readDataRootOverride() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(dataRootConfigFile, 'utf-8'));
+    if (raw.dataRoot && fs.existsSync(raw.dataRoot)) return raw.dataRoot;
+  } catch {
+    // No override configured yet, or the folder is gone (e.g. an unmounted network share) —
+    // fall back to the local default rather than failing to launch.
+  }
+  return null;
+}
+
+function writeDataRootOverride(dir) {
+  fs.writeFileSync(dataRootConfigFile, JSON.stringify({ dataRoot: dir }, null, 2));
+}
+
+const dataRoot = readDataRootOverride() || localUserDataDir;
+const isSharedDataRoot = dataRoot !== localUserDataDir;
+const smokeTestsDir = path.join(dataRoot, 'smoke-tests');
+const dataDir = path.join(dataRoot, 'data');
 const projectsFile = path.join(smokeTestsDir, 'projects.json');
 
 function slugify(name) {
@@ -311,6 +335,34 @@ ipcMain.handle('list-smoke-tests', () => {
 
 ipcMain.handle('list-projects', () => {
   return readProjects();
+});
+
+ipcMain.handle('get-data-root', () => {
+  return { dataRoot, isShared: isSharedDataRoot };
+});
+
+ipcMain.handle('choose-shared-data-root', async () => {
+  const result = await dialog.showOpenDialog(startWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    message: 'Choose a folder everyone on the team syncs (Dropbox, Google Drive, a network share, etc.)',
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+
+  const chosen = result.filePaths[0];
+  try {
+    fs.accessSync(chosen, fs.constants.W_OK);
+  } catch {
+    throw new Error('That folder isn\'t writable — choose one you have write access to.');
+  }
+  writeDataRootOverride(chosen);
+  setTimeout(() => { app.relaunch(); app.exit(); }, 150);
+  return { dataRoot: chosen };
+});
+
+ipcMain.handle('reset-data-root', () => {
+  fs.rmSync(dataRootConfigFile, { force: true });
+  setTimeout(() => { app.relaunch(); app.exit(); }, 150);
+  return { dataRoot: localUserDataDir };
 });
 
 ipcMain.handle('create-project', (_event, name) => {

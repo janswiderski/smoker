@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   listSmokeTests: () => ipcRenderer.invoke('list-smoke-tests'),
   listProjects: () => ipcRenderer.invoke('list-projects'),
+  getDataRoot: () => ipcRenderer.invoke('get-data-root'),
+  chooseSharedDataRoot: () => ipcRenderer.invoke('choose-shared-data-root'),
+  resetDataRoot: () => ipcRenderer.invoke('reset-data-root'),
   createProject: (name) => ipcRenderer.invoke('create-project', name),
   renameProject: (id, name) => ipcRenderer.invoke('rename-project', { id, name }),
   deleteProject: (id) => ipcRenderer.invoke('delete-project', id),
