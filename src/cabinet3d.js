@@ -309,10 +309,17 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
+// The scene is mostly static (a menu you look at and occasionally click), so the render loop
+// only actually draws a frame when something changed or is mid-animation, instead of forcing a
+// GPU render 60 times a second forever. Anything that changes what's on screen outside of the
+// per-frame animation updates (a rebuild, a resize) must set this back to true.
+let needsRender = true;
+
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  needsRender = true;
 });
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -368,6 +375,12 @@ const wallMaterial = new THREE.MeshStandardMaterial({ map: TEX.wall, roughness: 
 const sidewalkMaterial = new THREE.MeshStandardMaterial({ map: TEX.sidewalk, roughness: 0.85 });
 const roadMaterial = new THREE.MeshStandardMaterial({ map: TEX.road, roughness: 0.75 });
 
+// One shared material per pack color, reused across every shelf and every rebuild — avoids
+// allocating a new MeshStandardMaterial (and GPU program) per pack on every data change.
+const packMaterialsByColor = PACK_COLORS.map(
+  (color) => new THREE.MeshStandardMaterial({ color, map: TEX.pack, roughness: 0.4, clippingPlanes: PACK_CLIP_PLANES })
+);
+
 const contentGroup = new THREE.Group();
 scene.add(contentGroup);
 
@@ -375,10 +388,10 @@ function disposeObject(obj) {
   const children = obj.children ? obj.children.slice() : [];
   for (const child of children) disposeObject(child);
   if (obj.geometry) obj.geometry.dispose();
-  // Shared/loaded textures and module-level materials are reused across rebuilds by
-  // reference (three.js lazily re-initializes GPU resources on next use), so disposing
-  // them here on every rebuild is safe even though they aren't newly created each time.
-  if (obj.material) {
+  // Only planes (labels/logo) get a fresh CanvasTexture-backed material every rebuild — every
+  // other mesh uses one of the shared, module-level materials above and must not be disposed,
+  // or the next rebuild would render it with a torn-down GPU texture/program.
+  if (obj.material && obj.geometry?.type === 'PlaneGeometry') {
     if (obj.material.map) obj.material.map.dispose();
     obj.material.dispose();
   }
@@ -585,6 +598,7 @@ function buildScene() {
   camera.position.copy(defaultCameraPos);
   currentCameraTarget.copy(defaultCameraTarget);
   camera.lookAt(currentCameraTarget);
+  needsRender = true;
 }
 
 function buildRow(row, cavityBottom, project, tests) {
@@ -605,9 +619,7 @@ function buildRow(row, cavityBottom, project, tests) {
     const leftEdge = -SHELF_WIDTH / 2 + gap * (i + 1) + packWidth * i;
     const centerX = leftEdge + packWidth / 2;
     const isAddPack = i === tests.length;
-    const material = isAddPack
-      ? addPackMaterial
-      : new THREE.MeshStandardMaterial({ color: PACK_COLORS[i % PACK_COLORS.length], map: TEX.pack, roughness: 0.4, clippingPlanes: PACK_CLIP_PLANES });
+    const material = isAddPack ? addPackMaterial : packMaterialsByColor[i % PACK_COLORS.length];
     const packMesh = addBox(packWidth, PACK_HEIGHT, PACK_DEPTH, material, centerX, packCenterY, shelfCenterZ, packGroup);
 
     if (isAddPack) {
@@ -786,8 +798,11 @@ function animate() {
   requestAnimationFrame(animate);
 
   const now = performance.now();
+  let animating = false;
+
   for (const cover of swingingCovers) {
     if (cover.animStart === 0) continue;
+    animating = true;
     const t = Math.min(1, (now - cover.animStart) / SWING_DURATION_MS);
     cover.group.rotation.x = cover.animFrom + (cover.animTo - cover.animFrom) * easeInOutCubic(t);
     if (t >= 1) cover.animStart = 0;
@@ -795,6 +810,7 @@ function animate() {
 
   for (const row of scrollingRows) {
     if (row.animStart === 0) continue;
+    animating = true;
     const t = Math.min(1, (now - row.animStart) / SCROLL_DURATION_MS);
     row.group.position.x = row.animFrom + (row.target - row.animFrom) * easeInOutCubic(t);
     if (t >= 1) row.animStart = 0;
@@ -802,20 +818,27 @@ function animate() {
 
   for (const entry of pulseables) {
     if (entry.scale > 1) {
+      animating = true;
       entry.scale = Math.max(1, entry.scale - 0.02);
       entry.mesh.scale.setScalar(entry.scale);
     }
   }
 
   if (cameraAnim) {
+    animating = true;
     const t = Math.min(1, (now - cameraAnim.animStart) / CAMERA_ZOOM_DURATION_MS);
     const eased = easeInOutCubic(t);
     camera.position.lerpVectors(cameraAnim.fromPos, cameraAnim.toPos, eased);
     currentCameraTarget.lerpVectors(cameraAnim.fromTarget, cameraAnim.toTarget, eased);
     if (t >= 1) cameraAnim = null;
   }
-  camera.lookAt(currentCameraTarget);
 
+  // The scene is static outside of the animations above (or an explicit rebuild/resize) — skip
+  // the render call entirely rather than redrawing an unchanged frame 60 times a second.
+  if (!needsRender && !animating) return;
+  needsRender = false;
+
+  camera.lookAt(currentCameraTarget);
   renderer.render(scene, camera);
 }
 animate();
