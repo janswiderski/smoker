@@ -217,6 +217,9 @@ async function addTestPlanFlow(project) {
     } else if (mode === 'import') {
       const uploaded = await window.api.uploadSmokeTest(project.id);
       if (uploaded) await loadAndBuild();
+    } else if (mode === 'list') {
+      // Opens the review window; the plan is saved from there (see onTestPlansChanged).
+      await window.api.importNumberedList(project.id);
     }
   } catch (err) {
     showError(err.message || String(err));
@@ -579,6 +582,8 @@ let scrollingRows = []; // { group, min, max, target, animFrom, animStart }
 let interactables = []; // { mesh, onClick }
 let pulseables = []; // { mesh, scale }
 let openCoverEntry = null;
+
+window.api.onTestPlansChanged(() => loadAndBuild());
 
 async function loadAndBuild() {
   try {

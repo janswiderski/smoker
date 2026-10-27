@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Smoker — Import Numbered List</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="editor-page">
+    <h1>Import Numbered List</h1>
+    <div id="importError" class="error-banner" style="display:none;"></div>
+    <div class="threshold-row">
+      <label for="nameInput">Test plan name</label>
+      <input type="text" id="nameInput" class="list-import-name" />
+    </div>
+    <div class="list-import-header">
+      <span id="stepCount"></span>
+      <span class="list-import-hint">Tick a step to take a screenshot during it.</span>
+      <button id="toggleAllBtn" class="secondary">Tick All</button>
+    </div>
+    <ol id="stepList" class="list-import-steps"></ol>
+    <div class="actions-row">
+      <button id="cancelBtn" class="secondary">Cancel</button>
+      <button id="saveBtn" class="primary">Save Test Plan</button>
+    </div>
+  </div>
+  <script src="list-import.js"></script>
+</body>
+</html>

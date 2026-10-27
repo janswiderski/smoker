@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { compareImages } = require('./lib/diff');
+const { parseNumberedList } = require('./lib/numbered-list');
 
 app.setName('Smoker');
 
@@ -92,6 +93,7 @@ let resultsWindow = null;
 let editorWindow = null;
 let baselinePreviewWindow = null;
 let recorderWindow = null;
+let listImportWindow = null;
 let currentRun = null;
 
 // Global so they work while the app under test has focus (the overlay blurs itself after Next Step).
@@ -213,6 +215,39 @@ function createEditorWindow(fileName) {
   });
   editorWindow.on('closed', () => {
     editorWindow = null;
+  });
+}
+
+// Review window for an uploaded numbered list: every step with a "take a screenshot" box.
+// Every run's screenshots and video are also copied to ~/Desktop/Smoker/<plan name>/<run id>/, so
+// testers find them without digging into the data folder. The data folder stays the source of truth.
+function copyRunToDesktop(testName, runId, runDir) {
+  const files = fs.readdirSync(runDir).filter((f) => /^step-[^-]+\.png$/.test(f) || /^recording\./.test(f));
+  if (files.length === 0) return null;
+  const folderName = testName.replace(/[\/\\:*?"<>|]/g, '-').trim() || 'Test plan';
+  const destDir = path.join(app.getPath('desktop'), 'Smoker', folderName, runId);
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const f of files) fs.copyFileSync(path.join(runDir, f), path.join(destDir, f));
+  return destDir;
+}
+
+function createListImportWindow(init) {
+  if (listImportWindow) listImportWindow.close();
+  listImportWindow = new BrowserWindow({
+    width: 680,
+    height: 700,
+    parent: startWindow,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+    },
+  });
+  listImportWindow.loadFile(path.join(__dirname, 'src', 'list-import.html'));
+  listImportWindow.webContents.once('did-finish-load', () => {
+    listImportWindow.webContents.send('list-import-init', init);
+  });
+  listImportWindow.on('closed', () => {
+    listImportWindow = null;
   });
 }
 
@@ -516,14 +551,15 @@ ipcMain.handle('delete-project', (_event, id) => {
 ipcMain.handle('choose-add-test-plan-mode', async () => {
   const choice = await dialog.showMessageBox(startWindow, {
     type: 'question',
-    buttons: ['Create Blank', 'Import JSON File…', 'Cancel'],
+    buttons: ['Create Blank', 'Import JSON File…', 'Import Numbered List…', 'Cancel'],
     defaultId: 0,
-    cancelId: 2,
+    cancelId: 3,
     message: 'Add a test plan',
-    detail: 'Start from a blank plan, or import an existing JSON checklist.',
+    detail: 'Start from a blank plan, import an existing JSON checklist, or turn a numbered list (a .txt or .md file) into a plan.',
   });
   if (choice.response === 0) return 'blank';
   if (choice.response === 1) return 'import';
+  if (choice.response === 2) return 'list';
   return null;
 });
 
@@ -555,6 +591,43 @@ ipcMain.handle('upload-smoke-test', async (_event, projectId) => {
   const destName = `${slugify(json.name)}.json`;
   fs.writeFileSync(path.join(smokeTestsDir, destName), JSON.stringify(json, null, 2));
   return { file: destName, name: json.name, projectId, stepCount: json.steps.length };
+});
+
+ipcMain.handle('import-numbered-list', async (_event, projectId) => {
+  const result = await dialog.showOpenDialog(startWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Numbered list', extensions: ['txt', 'md', 'text'] }],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+
+  const filePath = result.filePaths[0];
+  const steps = parseNumberedList(fs.readFileSync(filePath, 'utf-8'));
+  if (steps.length === 0) {
+    throw new Error('No numbered steps found. Each step must start with a number, e.g. "1. Open the cart page."');
+  }
+  createListImportWindow({ projectId, name: path.basename(filePath, path.extname(filePath)), steps });
+  return { stepCount: steps.length };
+});
+
+ipcMain.handle('save-list-test-plan', (_event, { name, projectId, steps }) => {
+  const trimmedName = (name || '').trim();
+  if (!trimmedName || !slugify(trimmedName)) throw new Error('Give the test plan a name.');
+  const destName = `${slugify(trimmedName)}.json`;
+  if (fs.existsSync(path.join(smokeTestsDir, destName))) {
+    throw new Error(`A test plan named "${trimmedName}" already exists. Choose another name.`);
+  }
+  const json = {
+    name: trimmedName,
+    projectId,
+    steps: steps.map((step, index) => ({
+      id: index + 1,
+      instruction: step.instruction,
+      ...(step.screenshot ? { screenshot: true } : {}),
+    })),
+  };
+  fs.writeFileSync(path.join(smokeTestsDir, destName), JSON.stringify(json, null, 2));
+  if (startWindow) startWindow.webContents.send('test-plans-changed');
+  return { file: destName, name: trimmedName, projectId, stepCount: json.steps.length };
 });
 
 ipcMain.handle('delete-smoke-test', (_event, fileName) => {
@@ -719,6 +792,15 @@ ipcMain.handle('end-run', async () => {
   };
   fs.writeFileSync(path.join(currentRun.runDir, 'report.json'), JSON.stringify(report, null, 2));
   const runDir = currentRun.runDir;
+  try {
+    copyRunToDesktop(currentRun.testName, currentRun.runId, runDir);
+  } catch (err) {
+    dialog.showMessageBox(overlayWindow || startWindow, {
+      type: 'warning',
+      message: 'The run was saved, but not copied to the Desktop.',
+      detail: `${err.message}\n\nIts screenshots and video are still in View Test Runs.`,
+    });
+  }
   currentRun = null;
 
   if (overlayWindow) {

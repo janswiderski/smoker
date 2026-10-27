@@ -21,6 +21,7 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 - `src/styles.css` — shared stylesheet for every window, including the DOM overlays inside `cabinet3d.html`.
 - `src/textures/*.png` — the surface texture for every 3D element (cabinet body, shelf, cover, packs, chevrons, buttons, trash can, cardboard boxes, back and left walls, sidewalk, road). See [`src/textures/README.md`](src/textures/README.md) for the file-to-element mapping — swap any of them out and reload to restyle that element.
 - `lib/diff.js` — the `pixelmatch`/`pngjs` wrapper used to compare two screenshots and produce a highlighted diff image.
+- `lib/numbered-list.js` — turns an uploaded numbered list into test plan steps.
 - `exports/cabinet-scene.glb` — a manually-generated snapshot of the 3D scene (geometry + textures) for opening in Blender or another glTF-compatible tool. It's a one-off export, not something the app produces itself; regenerating it means re-adding a temporary `THREE.GLTFExporter` call and running it against a live instance.
 
 ### Windows
@@ -32,6 +33,7 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 | **Results window** | Per-test-plan run history, run detail, and the fullscreen baseline/diff comparison lightbox. |
 | **Editor window** | Raw-JSON + diff-threshold editor for a single test plan. |
 | **Recorder window** | Hidden. Records the screen during a run when video is turned on. |
+| **List import window** | Reviews an uploaded numbered list before it becomes a test plan: every step with a screenshot box. |
 | **Baseline preview window** | Shows a step's stored baseline image full-size, opened from the overlay's "View Baseline" button. |
 
 ## Sharing data across a team
@@ -89,6 +91,7 @@ The number of shelves is fixed once seeded — it never grows or shrinks automat
 Inside an open project shelf, each test plan is a colored pack showing its name. Packs shrink to fit the shelf's width as more test plans are added; once they'd get uncomfortably small, the shelf switches to a fixed pack width and scrolls instead — the side chevrons appear only on shelves that actually need it, and click them to scroll the packs left/right. The last pack, "+ Add Test Plan," offers a choice:
 - **Create Blank** — prompts for a name, creates a one-step placeholder plan, and opens it directly in the Editor.
 - **Import JSON File…** — the classic file-picker flow; validates the file has `name` + a non-empty `steps` array, then assigns it to the current project.
+- **Import Numbered List…** — pick a `.txt` or `.md` file with one step per numbered line (`1. Open the cart page.` or `1) ...`). A line without a number continues the step above it; anything before the first numbered line is ignored. A review window then lists every step with a box to tick when a screenshot should be taken during it (**Tick All** / **Untick All** for every step), and a name field filled from the file name. **Save Test Plan** creates the plan in the current project; a name that's already taken is refused.
 
 Clicking any real pack opens a DOM action panel over the (dimmed) 3D scene, styled and colored like that pack, with:
 - **Start Run** — asks whether to record a video, then begins a smoke-test run (opens the Overlay window). With video on, the whole primary screen (overlay included) is recorded until **End Run**.
@@ -103,7 +106,7 @@ The Overlay window shows the current step's instruction on the left and all cont
 - **View Baseline** — opens the step's stored baseline image in a small in-app preview window (only shown on steps with `screenshot: true`).
 - **Take Screenshot / Retake Screenshot** — captures the screen immediately. The overlay hides itself for the capture so it doesn't appear in the shot. If no baseline exists yet for that step, the screenshot becomes the baseline; otherwise it's diffed against the baseline via `pixelmatch`, with the result (`match` / `mismatch` / `baseline-created`) and mismatch percentage shown right in the overlay. Label switches to "Retake" once the step already has a result, and retaking overwrites it.
 - **Take Screenshot (2s Delay)** — same, but counts down 2 seconds first (for capturing hover states, open dropdowns, etc.).
-- **End Run** — finalizes and saves the run's `report.json`, even if zero screenshots were taken (the Results view then explicitly says so rather than showing a misleadingly empty page), and closes the overlay. Also currently causes the overlay to blur itself after **Next Step**, returning focus to whatever app is under test.
+- **End Run** — finalizes and saves the run's `report.json`, copies the run's screenshots and video to `~/Desktop/Smoker/<test plan name>/<run time>/` (the data folder keeps its own copy, which the Results window uses), even if zero screenshots were taken (the Results view then explicitly says so rather than showing a misleadingly empty page), and closes the overlay. Also currently causes the overlay to blur itself after **Next Step**, returning focus to whatever app is under test.
 
 ### Reviewing results
 The Results window (per test plan) lists past runs (`Run #N — <start time>`, with a match/mismatch/"no screenshots taken" badge and a Delete button per row). Opening a run shows every step with its screenshot, baseline, and diff image labeled and thumbnailed; clicking any of them opens a fullscreen lightbox with **Side by Side** (baseline vs. current) or **Diff Highlight** modes, and ‹ › (or arrow keys) to cycle between that run's screenshotted steps. From a run's detail view:

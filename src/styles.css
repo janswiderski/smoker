@@ -827,3 +827,42 @@ button.danger { background: #ff453a; color: white; }
   border-radius: 6px;
   border: 1px solid #3a3a3c;
 }
+
+/* Import Numbered List window */
+.list-import-name {
+  flex: 1;
+  width: auto !important;
+}
+.list-import-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.list-import-hint {
+  flex: 1;
+  color: #8a8a8e;
+}
+.list-import-steps {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 0 16px;
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #d8d8dc;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.list-import-steps li {
+  padding: 6px 0;
+  border-bottom: 1px solid #ececf0;
+}
+.list-import-steps li:last-child { border-bottom: none; }
+.list-import-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.list-import-step input { margin-top: 2px; flex-shrink: 0; }
