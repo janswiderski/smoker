@@ -268,6 +268,7 @@ const PROP_GAP = 100; // clearance between the side buttons and the decorative p
 const TRASH_RADIUS_TOP = 135;
 const TRASH_RADIUS_BOTTOM = 114;
 const TRASH_HEIGHT = 330;
+const TRASH_RADIAL_SEGMENTS = 24;
 // Stacked bottom to top. yaw = rotation around the vertical axis; negative turns the front face left.
 const BOXES = [
   { size: 280, height: 240, yaw: -0.05 },
@@ -281,7 +282,7 @@ const WALL_DEPTH = 30;
 const WALL_GAP = 20; // gap between the cabinet's back face and the wall
 
 const SIDEWALK_WIDTH = 2200;
-const SIDEWALK_DEPTH = 900;
+const SIDEWALK_DEPTH = 420; // shallow enough that the road shows at the bottom of the default view
 const SIDEWALK_THICKNESS = 24;
 
 const CURB_HEIGHT = 30;
@@ -329,21 +330,23 @@ window.addEventListener('resize', () => {
   needsRender = true;
 });
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.6);
 keyLight.position.set(600, 900, 1200);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.35);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.25);
 fillLight.position.set(-800, 200, -600);
 scene.add(fillLight);
 
 // ---- Editable texture files (src/textures/*.png) — one per element ----
 renderer.localClippingEnabled = true;
-const textureLoader = new THREE.TextureLoader();
+// The first build waits for every texture: 'cover' fitting needs each image's size, and drawing
+// before they arrive leaves the scene dark until the next click triggers a render.
+const textureLoadingManager = new THREE.LoadingManager();
+const texturesReady = new Promise((resolve) => { textureLoadingManager.onLoad = resolve; });
+const textureLoader = new THREE.TextureLoader(textureLoadingManager);
 function loadTexture(file) {
-  // Textures finish loading after the first frame is drawn, so redraw once each arrives —
-  // otherwise the scene stays dark until the next click triggers a render.
-  const texture = textureLoader.load(`textures/${file}`, () => { needsRender = true; });
+  const texture = textureLoader.load(`textures/${file}`);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -386,11 +389,69 @@ const wallLeftMaterial = new THREE.MeshStandardMaterial({ map: TEX.wallLeft, rou
 const sidewalkMaterial = new THREE.MeshStandardMaterial({ map: TEX.sidewalk, roughness: 0.85 });
 const roadMaterial = new THREE.MeshStandardMaterial({ map: TEX.road, roughness: 0.75 });
 
+// ---- Texture fitting ----
+// 'repeat' surfaces tile their image at a fixed world size, so big objects repeat it instead of
+// stretching it. 'cover' objects show the image once per face, cropped to the face's shape.
+const TILE_SIZE = { body: 400, shelf: 300, wall: 600, sidewalk: 300, road: 400, trashCan: 300 };
+
+function useRepeat(material, tileSize) {
+  material.map.wrapS = THREE.RepeatWrapping;
+  material.map.wrapT = THREE.RepeatWrapping;
+  material.userData.fit = { mode: 'repeat', tileSize };
+}
+
+function useCover(material) {
+  material.userData.fit = { mode: 'cover' };
+}
+
+useRepeat(bodyMaterial, TILE_SIZE.body);
+useRepeat(shelfMaterial, TILE_SIZE.shelf);
+useRepeat(wallMaterial, TILE_SIZE.wall);
+useRepeat(wallLeftMaterial, TILE_SIZE.wall);
+useRepeat(sidewalkMaterial, TILE_SIZE.sidewalk);
+useRepeat(roadMaterial, TILE_SIZE.road);
+useRepeat(trashCanMaterial, TILE_SIZE.trashCan);
+[coverMaterial, chevronMaterial, addProjectMaterial, addPackMaterial, editMaterial, deleteMaterial, cardboardBoxMaterial].forEach(useCover);
+
+function faceUVTransform(fit, map, faceWidth, faceHeight) {
+  if (fit.mode === 'repeat') {
+    return { su: faceWidth / fit.tileSize, sv: faceHeight / fit.tileSize, ou: 0, ov: 0 };
+  }
+  const imageAspect = map.image && map.image.width ? map.image.width / map.image.height : 1;
+  const faceAspect = faceWidth / faceHeight;
+  if (faceAspect > imageAspect) {
+    const sv = imageAspect / faceAspect;
+    return { su: 1, sv, ou: 0, ov: (1 - sv) / 2 };
+  }
+  const su = faceAspect / imageAspect;
+  return { su, sv: 1, ou: (1 - su) / 2, ov: 0 };
+}
+
+function transformUVs(uv, start, count, { su, sv, ou, ov }) {
+  for (let i = start; i < start + count; i++) {
+    uv.setXY(i, uv.getX(i) * su + ou, uv.getY(i) * sv + ov);
+  }
+  uv.needsUpdate = true;
+}
+
+// BoxGeometry stores 4 UVs per face, in the order +x, -x, +y, -y, +z, -z.
+function createBoxGeometry(width, height, depth, material) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const fit = material.userData.fit;
+  if (!fit) return geometry;
+  const faceSizes = [[depth, height], [depth, height], [width, depth], [width, depth], [width, height], [width, height]];
+  faceSizes.forEach(([faceWidth, faceHeight], face) => {
+    transformUVs(geometry.attributes.uv, face * 4, 4, faceUVTransform(fit, material.map, faceWidth, faceHeight));
+  });
+  return geometry;
+}
+
 // One shared material per pack color, reused across every shelf and every rebuild — avoids
 // allocating a new MeshStandardMaterial (and GPU program) per pack on every data change.
 const packMaterialsByColor = PACK_COLORS.map(
   (color) => new THREE.MeshStandardMaterial({ color, map: TEX.pack, roughness: 0.4, clippingPlanes: PACK_CLIP_PLANES })
 );
+packMaterialsByColor.forEach(useCover);
 
 const contentGroup = new THREE.Group();
 scene.add(contentGroup);
@@ -415,7 +476,7 @@ function clearGroup(group) {
 }
 
 function addBox(width, height, depth, material, x, y, z, parent = contentGroup) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  const mesh = new THREE.Mesh(createBoxGeometry(width, height, depth, material), material);
   mesh.position.set(x, y, z);
   parent.add(mesh);
   return mesh;
@@ -488,6 +549,10 @@ function addChevron(pointsLeft, x, y, z) {
   shape.closePath();
   const geometry = new THREE.ExtrudeGeometry(shape, { depth: CHEVRON_DEPTH, bevelEnabled: false });
   geometry.translate(0, 0, -CHEVRON_DEPTH / 2);
+  // ExtrudeGeometry UVs are raw shape coordinates; map the chevron's bounds onto the image first.
+  const uv = geometry.attributes.uv;
+  transformUVs(uv, 0, uv.count, { su: 1 / CHEVRON_WIDTH, sv: 1 / CHEVRON_HEIGHT, ou: 0.5, ov: 0.5 });
+  transformUVs(uv, 0, uv.count, faceUVTransform(chevronMaterial.userData.fit, chevronMaterial.map, CHEVRON_WIDTH, CHEVRON_HEIGHT));
   const mesh = new THREE.Mesh(geometry, chevronMaterial);
   mesh.position.set(x, y, z);
   contentGroup.add(mesh);
@@ -517,7 +582,7 @@ let openCoverEntry = null;
 
 async function loadAndBuild() {
   try {
-    const [projects, tests] = await Promise.all([window.api.listProjects(), window.api.listSmokeTests()]);
+    const [projects, tests] = await Promise.all([window.api.listProjects(), window.api.listSmokeTests(), texturesReady]);
     currentProjects = projects;
     currentTestsByProject = new Map(
       projects.filter(Boolean).map((p) => [p.id, tests.filter((t) => t.projectId === p.id)])
@@ -660,7 +725,7 @@ function buildRow(row, cavityBottom, project, tests) {
   const hinge = new THREE.Group();
   hinge.position.set(0, rowBottom, coverClosedCenterZ);
   contentGroup.add(hinge);
-  const coverMesh = new THREE.Mesh(new THREE.BoxGeometry(COVER_WIDTH, COVER_HEIGHT, COVER_DEPTH), coverMaterial);
+  const coverMesh = new THREE.Mesh(createBoxGeometry(COVER_WIDTH, COVER_HEIGHT, COVER_DEPTH, coverMaterial), coverMaterial);
   coverMesh.position.set(0, COVER_HEIGHT / 2, 0);
   hinge.add(coverMesh);
   const coverLabel = createLabelTexture(project.name);
@@ -730,17 +795,19 @@ function buildProps(halfH) {
   const leftEdgeX = DELETE_BUTTON_X - ICON_BUTTON_SIZE / 2;
 
   const trashX = rightEdgeX + PROP_GAP + TRASH_RADIUS_TOP;
-  const trashMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(TRASH_RADIUS_TOP, TRASH_RADIUS_BOTTOM, TRASH_HEIGHT, 24),
-    trashCanMaterial
-  );
+  const trashGeometry = new THREE.CylinderGeometry(TRASH_RADIUS_TOP, TRASH_RADIUS_BOTTOM, TRASH_HEIGHT, TRASH_RADIAL_SEGMENTS);
+  // Tile only the side (the first (segments + 1) * 2 UVs); a whole number of repeats around
+  // avoids a seam. The lid and bottom keep showing the image once.
+  const repeatsAround = Math.max(1, Math.round((2 * Math.PI * TRASH_RADIUS_TOP) / TILE_SIZE.trashCan));
+  transformUVs(trashGeometry.attributes.uv, 0, (TRASH_RADIAL_SEGMENTS + 1) * 2, { su: repeatsAround, sv: TRASH_HEIGHT / TILE_SIZE.trashCan, ou: 0, ov: 0 });
+  const trashMesh = new THREE.Mesh(trashGeometry, trashCanMaterial);
   trashMesh.position.set(trashX, -halfH + TRASH_HEIGHT / 2, 0);
   contentGroup.add(trashMesh);
 
   const boxX = leftEdgeX - PROP_GAP - Math.max(...BOXES.map((b) => b.size)) / 2;
   let boxBottomY = -halfH;
   for (const box of BOXES) {
-    const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(box.size, box.height, box.size), cardboardBoxMaterial);
+    const boxMesh = new THREE.Mesh(createBoxGeometry(box.size, box.height, box.size, cardboardBoxMaterial), cardboardBoxMaterial);
     boxMesh.position.set(boxX, boxBottomY + box.height / 2, 0);
     boxMesh.rotation.y = box.yaw;
     contentGroup.add(boxMesh);
