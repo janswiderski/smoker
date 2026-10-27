@@ -19,7 +19,7 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 - `src/cabinet3d.html` + `src/cabinet3d.js` — the main window: a Three.js scene for the cabinet, plus a handful of ordinary DOM overlay elements (action panel, rename/create-project prompt, error banner) layered on top of the canvas for anything that's just text and buttons.
 - `src/*.html` + `src/*.js` (the rest) — one pair per secondary window (see below), plain DOM/CSS, no build step.
 - `src/styles.css` — shared stylesheet for every window, including the DOM overlays inside `cabinet3d.html`.
-- `src/textures/*.png` — the surface texture for every 3D element (cabinet body, shelf, cover, packs, chevrons, buttons, trash can, cardboard boxes, wall, sidewalk, road). See [`src/textures/README.md`](src/textures/README.md) for the file-to-element mapping — swap any of them out and reload to restyle that element.
+- `src/textures/*.png` — the surface texture for every 3D element (cabinet body, shelf, cover, packs, chevrons, buttons, trash can, cardboard boxes, back and left walls, sidewalk, road). See [`src/textures/README.md`](src/textures/README.md) for the file-to-element mapping — swap any of them out and reload to restyle that element.
 - `lib/diff.js` — the `pixelmatch`/`pngjs` wrapper used to compare two screenshots and produce a highlighted diff image.
 - `exports/cabinet-scene.glb` — a manually-generated snapshot of the 3D scene (geometry + textures) for opening in Blender or another glTF-compatible tool. It's a one-off export, not something the app produces itself; regenerating it means re-adding a temporary `THREE.GLTFExporter` call and running it against a live instance.
 
@@ -27,7 +27,7 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 
 | Window | Purpose |
 |---|---|
-| **Start window** (`cabinet3d.html`/`cabinet3d.js`) | The main menu — a real 3D cabinet scene sitting on a small street backdrop (wall, sidewalk, curb, road), one shelf per project slot. Always open; the app's "home". |
+| **Start window** (`cabinet3d.html`/`cabinet3d.js`) | The main menu — a real 3D cabinet scene sitting on a small street backdrop (back and left walls, sidewalk, curb, road), one shelf per project slot. Always open; the app's "home". |
 | **Overlay window** | The floating instructions + action-button panel shown while a test run is in progress. Frameless, always-on-top, transparent background. |
 | **Results window** | Per-test-plan run history, run detail, and the fullscreen baseline/diff comparison lightbox. |
 | **Editor window** | Raw-JSON + diff-threshold editor for a single test plan. |

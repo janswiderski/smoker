@@ -262,11 +262,15 @@ const SCROLL_STEP = SHELF_WIDTH * 0.6;
 const SCROLL_DURATION_MS = 400;
 
 const PROP_GAP = 100; // clearance between the side buttons and the decorative props
-const TRASH_RADIUS_TOP = 90;
-const TRASH_RADIUS_BOTTOM = 76;
-const TRASH_HEIGHT = 220;
-const BOX_SIZE = 140;
-const BOX_HEIGHT = 120;
+const TRASH_RADIUS_TOP = 135;
+const TRASH_RADIUS_BOTTOM = 114;
+const TRASH_HEIGHT = 330;
+// Stacked bottom to top. yaw = rotation around the vertical axis; negative turns the front face left.
+const BOXES = [
+  { size: 280, height: 240, yaw: -0.05 },
+  { size: 280, height: 240, yaw: -20 * Math.PI / 180 },
+  { size: 210, height: 180, yaw: -0.03 },
+];
 
 const WALL_WIDTH = 2200;
 const WALL_HEIGHT = 1700;
@@ -351,6 +355,7 @@ const TEX = {
   trashCan: loadTexture('trash-can.png'),
   cardboardBox: loadTexture('cardboard-box.png'),
   wall: loadTexture('wall.png'),
+  wallLeft: loadTexture('wall-left.png'),
   sidewalk: loadTexture('sidewalk.png'),
   road: loadTexture('road.png'),
 };
@@ -372,6 +377,7 @@ const deleteMaterial = new THREE.MeshStandardMaterial({ map: TEX.buttonDelete, r
 const trashCanMaterial = new THREE.MeshStandardMaterial({ map: TEX.trashCan, roughness: 0.6, metalness: 0.2 });
 const cardboardBoxMaterial = new THREE.MeshStandardMaterial({ map: TEX.cardboardBox, roughness: 0.9 });
 const wallMaterial = new THREE.MeshStandardMaterial({ map: TEX.wall, roughness: 0.9 });
+const wallLeftMaterial = new THREE.MeshStandardMaterial({ map: TEX.wallLeft, roughness: 0.9 });
 const sidewalkMaterial = new THREE.MeshStandardMaterial({ map: TEX.sidewalk, roughness: 0.85 });
 const roadMaterial = new THREE.MeshStandardMaterial({ map: TEX.road, roughness: 0.75 });
 
@@ -695,6 +701,10 @@ function buildStreetScene(halfH) {
   const wallBackZ = -halfD - WALL_GAP - WALL_DEPTH / 2;
   addBox(WALL_WIDTH, WALL_HEIGHT, WALL_DEPTH, wallMaterial, 0, -halfH + WALL_HEIGHT / 2, wallBackZ);
 
+  // Left wall: perpendicular to the back wall, along the sidewalk's left edge up to the curb.
+  const leftWallLength = SIDEWALK_DEPTH + WALL_DEPTH;
+  addBox(WALL_DEPTH, WALL_HEIGHT, leftWallLength, wallLeftMaterial, -SIDEWALK_WIDTH / 2 + WALL_DEPTH / 2, -halfH + WALL_HEIGHT / 2, wallBackZ - WALL_DEPTH / 2 + leftWallLength / 2);
+
   // Sidewalk: the ground plane everything else rests on (top surface at -halfH).
   const sidewalkBackZ = -halfD - WALL_GAP;
   const sidewalkFrontZ = sidewalkBackZ + SIDEWALK_DEPTH;
@@ -721,13 +731,14 @@ function buildProps(halfH) {
   trashMesh.position.set(trashX, -halfH + TRASH_HEIGHT / 2, 0);
   contentGroup.add(trashMesh);
 
-  const boxX = editEdgeX - PROP_GAP - BOX_SIZE / 2;
-  const boxTilts = [-0.05, 0.04, -0.03];
-  for (let i = 0; i < 3; i++) {
-    const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(BOX_SIZE, BOX_HEIGHT, BOX_SIZE), cardboardBoxMaterial);
-    boxMesh.position.set(boxX, -halfH + BOX_HEIGHT * (i + 0.5), 0);
-    boxMesh.rotation.y = boxTilts[i];
+  const boxX = editEdgeX - PROP_GAP - Math.max(...BOXES.map((b) => b.size)) / 2;
+  let boxBottomY = -halfH;
+  for (const box of BOXES) {
+    const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(box.size, box.height, box.size), cardboardBoxMaterial);
+    boxMesh.position.set(boxX, boxBottomY + box.height / 2, 0);
+    boxMesh.rotation.y = box.yaw;
     contentGroup.add(boxMesh);
+    boxBottomY += box.height;
   }
 }
 
