@@ -19,7 +19,7 @@ window then use the app menu / refresh) to see it.
 | `pack-add.png` | "+ Add Test Plan" pack | The trailing grey pack at the end of each shelf | 614×1024 (3:5) | |
 | `chevron.png` | Side chevron | The scroll arrows on either side of a shelf (only visible once a shelf has enough packs to need scrolling) | 512×1024 (1:2) | |
 | `button-edit.png` | Edit button | The button to the left of the cabinet that renames a project | 512×512 | |
-| `button-delete.png` | Delete button | The button to the right of the cabinet that deletes a project | 512×512 | |
+| `button-delete.png` | Delete button | The button left of the Edit button that deletes a project | 512×512 | |
 | `trash-can.png` | Trash can | The cylindrical prop to the right of the cabinet | 2048×796 (2.6:1) | Wraps once around the side; the lid and bottom also use it |
 | `cardboard-box.png` | Cardboard box | The 3 stacked boxes to the left of the cabinet (all 3 share this one texture) | 1024×878 (7:6) | Used on every face, including the square tops |
 | `wall.png` | Back wall | Flat backdrop behind the whole scene | 2048×1582 (1.3:1) | |

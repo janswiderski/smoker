@@ -239,7 +239,7 @@ const SHELF_HEIGHT = 10;
 
 const PACK_HEIGHT = 100;
 const PACK_WIDTH_DEFAULT = 60;
-const PACK_DEPTH = 20;
+const PACK_DEPTH = 40;
 
 const COVER_WIDTH = 600;
 const COVER_HEIGHT = 150;
@@ -256,6 +256,9 @@ const CHEVRON_DEPTH = 20;
 const SIDE_GAP = 30;
 const SIDE_GAP_2 = 20;
 const ICON_BUTTON_SIZE = 70;
+// Both icon buttons sit left of the cabinet: edit next to the chevron, delete further out.
+const EDIT_BUTTON_X = -(BODY_WIDTH / 2 + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE / 2);
+const DELETE_BUTTON_X = EDIT_BUTTON_X - ICON_BUTTON_SIZE - SIDE_GAP_2;
 
 const MAX_PACKS_VISIBLE = 10; // packs shown at once before a shelf switches to scrolling
 const SCROLL_STEP = SHELF_WIDTH * 0.6;
@@ -338,7 +341,9 @@ scene.add(fillLight);
 renderer.localClippingEnabled = true;
 const textureLoader = new THREE.TextureLoader();
 function loadTexture(file) {
-  const texture = textureLoader.load(`textures/${file}`);
+  // Textures finish loading after the first frame is drawn, so redraw once each arrives —
+  // otherwise the scene stays dark until the next click triggers a render.
+  const texture = textureLoader.load(`textures/${file}`, () => { needsRender = true; });
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -611,6 +616,8 @@ function buildRow(row, cavityBottom, project, tests) {
   const rowBottom = cavityBottom + row * ROW_PITCH;
   const rowCenterY = rowBottom + COVER_HEIGHT / 2;
   const shelfCenterZ = cavityBackZ + INDENT_DEPTH / 2;
+  // Packs stand against the cavity's back so their front stays behind the closed cover.
+  const packCenterZ = cavityBackZ + PACK_DEPTH / 2;
 
   addBox(SHELF_WIDTH, SHELF_HEIGHT, SHELF_DEPTH, shelfMaterial, 0, rowBottom + SHELF_HEIGHT / 2, shelfCenterZ);
 
@@ -626,16 +633,16 @@ function buildRow(row, cavityBottom, project, tests) {
     const centerX = leftEdge + packWidth / 2;
     const isAddPack = i === tests.length;
     const material = isAddPack ? addPackMaterial : packMaterialsByColor[i % PACK_COLORS.length];
-    const packMesh = addBox(packWidth, PACK_HEIGHT, PACK_DEPTH, material, centerX, packCenterY, shelfCenterZ, packGroup);
+    const packMesh = addBox(packWidth, PACK_HEIGHT, PACK_DEPTH, material, centerX, packCenterY, packCenterZ, packGroup);
 
     if (isAddPack) {
       const plusTexture = createLabelTexture('+ Add Test Plan');
-      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), plusTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1, packGroup, PACK_CLIP_PLANES);
+      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), plusTexture, centerX, packCenterY, packCenterZ + PACK_DEPTH / 2 + 1, packGroup, PACK_CLIP_PLANES);
       interactables.push({ mesh: packMesh, onClick: () => addTestPlanFlow(project) });
     } else {
       const test = tests[i];
       const labelTexture = createLabelTexture(test.name);
-      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), labelTexture, centerX, packCenterY, shelfCenterZ + PACK_DEPTH / 2 + 1, packGroup, PACK_CLIP_PLANES);
+      addPlane(packWidth * 0.9, packWidth * 0.9 * (200 / 512), labelTexture, centerX, packCenterY, packCenterZ + PACK_DEPTH / 2 + 1, packGroup, PACK_CLIP_PLANES);
       const color = PACK_COLORS[i % PACK_COLORS.length];
       interactables.push({ mesh: packMesh, onClick: () => openActionPanel(test, color) });
     }
@@ -672,19 +679,17 @@ function buildRow(row, cavityBottom, project, tests) {
   swingingCovers.push(coverEntry);
   interactables.push({ mesh: coverMesh, onClick: () => toggleCover(coverEntry) });
 
-  // Side controls: chevrons flank the row, edit/delete sit further outward
+  // Side controls: chevrons flank the row, edit/delete sit further out on the left
   const sideZ = coverClosedCenterZ;
   const leftChevronX = -(halfW + SIDE_GAP + CHEVRON_WIDTH / 2);
   const rightChevronX = halfW + SIDE_GAP + CHEVRON_WIDTH / 2;
-  const editX = -(halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE / 2);
-  const deleteX = halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE / 2;
 
   const leftChevron = addChevron(true, leftChevronX, rowCenterY, sideZ);
   const rightChevron = addChevron(false, rightChevronX, rowCenterY, sideZ);
   leftChevron.visible = needsScroll;
   rightChevron.visible = needsScroll;
-  const editBtn = addIconButton(editMaterial, editX, rowCenterY, sideZ);
-  const deleteBtn = addIconButton(deleteMaterial, deleteX, rowCenterY, sideZ);
+  const editBtn = addIconButton(editMaterial, EDIT_BUTTON_X, rowCenterY, sideZ);
+  const deleteBtn = addIconButton(deleteMaterial, DELETE_BUTTON_X, rowCenterY, sideZ);
 
   if (needsScroll) {
     pulseables.push({ mesh: leftChevron, scale: 1 }, { mesh: rightChevron, scale: 1 });
@@ -720,10 +725,11 @@ function buildStreetScene(halfH) {
 }
 
 function buildProps(halfH) {
-  const deleteEdgeX = halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE;
-  const editEdgeX = -deleteEdgeX;
+  // The trash can keeps the spot it had when the delete button sat on the right.
+  const rightEdgeX = halfW + SIDE_GAP + CHEVRON_WIDTH + SIDE_GAP_2 + ICON_BUTTON_SIZE;
+  const leftEdgeX = DELETE_BUTTON_X - ICON_BUTTON_SIZE / 2;
 
-  const trashX = deleteEdgeX + PROP_GAP + TRASH_RADIUS_TOP;
+  const trashX = rightEdgeX + PROP_GAP + TRASH_RADIUS_TOP;
   const trashMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(TRASH_RADIUS_TOP, TRASH_RADIUS_BOTTOM, TRASH_HEIGHT, 24),
     trashCanMaterial
@@ -731,7 +737,7 @@ function buildProps(halfH) {
   trashMesh.position.set(trashX, -halfH + TRASH_HEIGHT / 2, 0);
   contentGroup.add(trashMesh);
 
-  const boxX = editEdgeX - PROP_GAP - Math.max(...BOXES.map((b) => b.size)) / 2;
+  const boxX = leftEdgeX - PROP_GAP - Math.max(...BOXES.map((b) => b.size)) / 2;
   let boxBottomY = -halfH;
   for (const box of BOXES) {
     const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(box.size, box.height, box.size), cardboardBoxMaterial);
