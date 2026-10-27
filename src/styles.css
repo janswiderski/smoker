@@ -745,13 +745,29 @@ button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
   -webkit-app-region: drag;
+}
+.overlay-resize-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  border-top-right-radius: 14px;
+  cursor: nesw-resize;
+  background: linear-gradient(225deg, transparent 5px, #6e6e73 5px, #6e6e73 6.5px, transparent 6.5px, transparent 9px, #6e6e73 9px, #6e6e73 10.5px, transparent 10.5px);
+  -webkit-app-region: no-drag;
+}
+.overlay-resize-grip:hover {
+  background: linear-gradient(225deg, transparent 5px, #c7c7cc 5px, #c7c7cc 6.5px, transparent 6.5px, transparent 9px, #c7c7cc 9px, #c7c7cc 10.5px, transparent 10.5px);
 }
 .overlay-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   flex-shrink: 0;
+  padding-right: 8px;
 }
 .overlay-header .test-name {
   font-size: 12px;

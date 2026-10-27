@@ -86,6 +86,8 @@ function ensureDirs() {
 const OVERLAY_WIDTH = 480;
 const OVERLAY_HEIGHT = 260;
 const OVERLAY_MARGIN = 20;
+const OVERLAY_MIN_WIDTH = 320;
+const OVERLAY_MIN_HEIGHT = 180;
 
 let startWindow = null;
 let overlayWindow = null;
@@ -95,6 +97,8 @@ let baselinePreviewWindow = null;
 let recorderWindow = null;
 let listImportWindow = null;
 let currentRun = null;
+// Last overlay size the user picked, reused for later runs in this session.
+let overlaySize = { width: OVERLAY_WIDTH, height: OVERLAY_HEIGHT };
 
 // Global so they work while the app under test has focus (the overlay blurs itself after Next Step).
 const NEXT_STEP_SHORTCUT = 'Control+Alt+Right';
@@ -140,10 +144,10 @@ function createOverlayWindow() {
   const primary = screen.getPrimaryDisplay();
   const { height: workHeight } = primary.workAreaSize;
   overlayWindow = new BrowserWindow({
-    width: OVERLAY_WIDTH,
-    height: OVERLAY_HEIGHT,
+    width: overlaySize.width,
+    height: overlaySize.height,
     x: OVERLAY_MARGIN,
-    y: workHeight - OVERLAY_HEIGHT - OVERLAY_MARGIN,
+    y: workHeight - overlaySize.height - OVERLAY_MARGIN,
     frame: false,
     alwaysOnTop: true,
     resizable: false,
@@ -769,6 +773,23 @@ function goToNextStep() {
   if (overlayWindow) overlayWindow.blur();
   return { stepIndex: currentRun.stepIndex, isLast: currentRun.stepIndex === currentRun.steps.length - 1 };
 }
+
+// Resized from the overlay's own grip (a frameless transparent window has no native resize edges).
+// The bottom-left corner stays put, so the overlay grows up and to the right.
+ipcMain.on('resize-overlay', (_event, { width, height }) => {
+  if (!overlayWindow) return;
+  const bounds = overlayWindow.getBounds();
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const newWidth = Math.round(Math.min(Math.max(width, OVERLAY_MIN_WIDTH), workArea.width));
+  const newHeight = Math.round(Math.min(Math.max(height, OVERLAY_MIN_HEIGHT), workArea.height));
+  overlayWindow.setBounds({
+    x: bounds.x,
+    y: bounds.y + bounds.height - newHeight,
+    width: newWidth,
+    height: newHeight,
+  });
+  overlaySize = { width: newWidth, height: newHeight };
+});
 
 ipcMain.handle('prev-step', () => goToPrevStep());
 ipcMain.handle('next-step', () => goToNextStep());

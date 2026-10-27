@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   prevStep: () => ipcRenderer.invoke('prev-step'),
   nextStep: () => ipcRenderer.invoke('next-step'),
   endRun: () => ipcRenderer.invoke('end-run'),
+  resizeOverlay: (width, height) => ipcRenderer.send('resize-overlay', { width, height }),
   revealInFinder: (filePath) => ipcRenderer.invoke('reveal-in-finder', filePath),
   openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),

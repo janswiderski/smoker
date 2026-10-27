@@ -8,6 +8,7 @@ const viewBaselineBtn = document.getElementById('viewBaselineBtn');
 const screenshotBtn = document.getElementById('screenshotBtn');
 const delayedScreenshotBtn = document.getElementById('delayedScreenshotBtn');
 const endBtn = document.getElementById('endBtn');
+const resizeGrip = document.getElementById('resizeGrip');
 
 const screenshotOnlyButtons = [viewBaselineBtn, screenshotBtn, delayedScreenshotBtn];
 
@@ -92,4 +93,25 @@ endBtn.addEventListener('click', () => {
   endBtn.disabled = true;
   endBtn.textContent = 'Saving…';
   window.api.endRun();
+});
+
+// The grip sits in the top-right corner: drag up/right to grow, down/left to shrink.
+resizeGrip.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  resizeGrip.setPointerCapture(event.pointerId);
+  const start = { x: event.screenX, y: event.screenY, width: window.outerWidth, height: window.outerHeight };
+  const onMove = (moveEvent) => {
+    window.api.resizeOverlay(
+      start.width + (moveEvent.screenX - start.x),
+      start.height - (moveEvent.screenY - start.y),
+    );
+  };
+  const onUp = () => {
+    resizeGrip.removeEventListener('pointermove', onMove);
+    resizeGrip.removeEventListener('pointerup', onUp);
+    resizeGrip.removeEventListener('pointercancel', onUp);
+  };
+  resizeGrip.addEventListener('pointermove', onMove);
+  resizeGrip.addEventListener('pointerup', onUp);
+  resizeGrip.addEventListener('pointercancel', onUp);
 });
