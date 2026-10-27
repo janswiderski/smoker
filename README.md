@@ -31,6 +31,7 @@ Plain Electron, no framework or bundler (Three.js is loaded via a browser import
 | **Overlay window** | The floating instructions + action-button panel shown while a test run is in progress. Frameless, always-on-top, transparent background. |
 | **Results window** | Per-test-plan run history, run detail, and the fullscreen baseline/diff comparison lightbox. |
 | **Editor window** | Raw-JSON + diff-threshold editor for a single test plan. |
+| **Recorder window** | Hidden. Records the screen during a run when video is turned on. |
 | **Baseline preview window** | Shows a step's stored baseline image full-size, opened from the overlay's "View Baseline" button. |
 
 ## Sharing data across a team
@@ -55,7 +56,8 @@ data/
       <ISO-timestamp>/
         step-<id>.png         # screenshot captured during that run
         step-<id>-diff.png    # pixelmatch diff image (only if a baseline existed)
-        report.json           # { testName, runId, startedAt, finishedAt, results[] }
+        recording.mp4         # screen video of the run (only if video was on; .webm if MP4 is not supported)
+        report.json           # { testName, runId, startedAt, finishedAt, videoPath, results[] }
 ```
 
 A **test plan** JSON file looks like:
@@ -89,7 +91,7 @@ Inside an open project shelf, each test plan is a colored pack showing its name.
 - **Import JSON File…** — the classic file-picker flow; validates the file has `name` + a non-empty `steps` array, then assigns it to the current project.
 
 Clicking any real pack opens a DOM action panel over the (dimmed) 3D scene, styled and colored like that pack, with:
-- **Start Run** — begins a smoke-test run (opens the Overlay window).
+- **Start Run** — asks whether to record a video, then begins a smoke-test run (opens the Overlay window). With video on, the whole primary screen (overlay included) is recorded until **End Run**.
 - **View Test Runs** — opens the Results window for this plan.
 - **Edit** — opens the Editor window (raw JSON + a dedicated diff-threshold field).
 - **Download** — exports the plan's JSON to a location you choose.
@@ -97,7 +99,7 @@ Clicking any real pack opens a DOM action panel over the (dimmed) 3D scene, styl
 
 ### Running a test
 The Overlay window shows the current step's instruction on the left and all controls in a grid on the right:
-- **‹ Prev / Next Step** — move between steps in either direction; revisiting a step shows whatever result it already has.
+- **‹ Prev / Next Step** — move between steps in either direction; revisiting a step shows whatever result it already has. Shortcuts **Ctrl+Option+→** (next) and **Ctrl+Option+←** (prev) work during a run even when the app under test has focus. If another app (e.g. Rectangle) already uses them, Smoker shows a warning and only the buttons work.
 - **View Baseline** — opens the step's stored baseline image in a small in-app preview window (only shown on steps with `screenshot: true`).
 - **Take Screenshot / Retake Screenshot** — captures the screen immediately. The overlay hides itself for the capture so it doesn't appear in the shot. If no baseline exists yet for that step, the screenshot becomes the baseline; otherwise it's diffed against the baseline via `pixelmatch`, with the result (`match` / `mismatch` / `baseline-created`) and mismatch percentage shown right in the overlay. Label switches to "Retake" once the step already has a result, and retaking overwrites it.
 - **Take Screenshot (2s Delay)** — same, but counts down 2 seconds first (for capturing hover states, open dropdowns, etc.).
@@ -105,11 +107,13 @@ The Overlay window shows the current step's instruction on the left and all cont
 
 ### Reviewing results
 The Results window (per test plan) lists past runs (`Run #N — <start time>`, with a match/mismatch/"no screenshots taken" badge and a Delete button per row). Opening a run shows every step with its screenshot, baseline, and diff image labeled and thumbnailed; clicking any of them opens a fullscreen lightbox with **Side by Side** (baseline vs. current) or **Diff Highlight** modes, and ‹ › (or arrow keys) to cycle between that run's screenshotted steps. From a run's detail view:
+- **Video** — if the run was recorded, a player is shown above the steps, with **Show Video in Finder**.
 - **Set as Baseline** — promotes every screenshot in that run to become the new baseline for its step, for future comparisons.
 - **Delete Run** — removes just that run's directory.
 - **Download Collage** (per step) — composites Baseline / Test Run / Diff (whichever exist) stacked vertically, each labeled with its role and capture timestamp, into one PNG you save wherever you like.
 
 ## Known limitations
 - The cabinet's shelf count is fixed once seeded and never grows — see "Managing projects" above. There's no UI for expanding capacity; it would need new logic to add a shelf on demand.
-- Screenshot capture requires the OS to grant Smoker Screen Recording permission (macOS will prompt on first use).
+- Screenshot capture and video recording require the OS to grant Smoker Screen Recording permission (macOS will prompt on first use).
+- Videos are about 30 MB per minute. With a shared data folder they sync to everyone like the rest of the run.
 - See [`docs/windows-compatibility.md`](docs/windows-compatibility.md) for a full audit of what would need attention to run this on Windows — short version: no code should block it, one macOS-oriented overlay-window behavior degrades gracefully, and there's no packaging/build config yet for producing an actual `.exe`.

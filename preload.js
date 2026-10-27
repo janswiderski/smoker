@@ -35,5 +35,11 @@ contextBridge.exposeInMainWorld('api', {
   onStepUpdate: (callback) => ipcRenderer.on('step-update', (_event, data) => callback(data)),
   onResultsInit: (callback) => ipcRenderer.on('results-init', (_event, data) => callback(data)),
   onEditorInit: (callback) => ipcRenderer.on('editor-init', (_event, data) => callback(data)),
+  recorderStarted: (mimeType) => ipcRenderer.send('recorder-started', mimeType),
+  sendRecorderChunk: (chunk) => ipcRenderer.send('recorder-chunk', chunk),
+  recorderStopped: () => ipcRenderer.send('recorder-stopped'),
+  recorderError: (message) => ipcRenderer.send('recorder-error', message),
+  onRecorderStart: (callback) => ipcRenderer.on('recorder-start', (_event, data) => callback(data)),
+  onRecorderStop: (callback) => ipcRenderer.on('recorder-stop', () => callback()),
   onBaselinePreviewInit: (callback) => ipcRenderer.on('baseline-preview-init', (_event, data) => callback(data)),
 });

@@ -88,4 +88,8 @@ viewBaselineBtn.addEventListener('click', async () => {
   }
 });
 
-endBtn.addEventListener('click', () => window.api.endRun());
+endBtn.addEventListener('click', () => {
+  endBtn.disabled = true;
+  endBtn.textContent = 'Saving…';
+  window.api.endRun();
+});

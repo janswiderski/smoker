@@ -49,8 +49,8 @@ actionStartBtn.addEventListener('click', async () => {
   if (!selectedTestFile) return;
   showError('');
   try {
-    await window.api.startRun(selectedTestFile);
-    closeActionPanel();
+    const res = await window.api.startRun(selectedTestFile);
+    if (!res.cancelled) closeActionPanel();
   } catch (err) {
     showError(err.message || String(err));
   }

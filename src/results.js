@@ -8,6 +8,9 @@ const stepListEl = document.getElementById('stepList');
 const backBtn = document.getElementById('backBtn');
 const setBaselineBtn = document.getElementById('setBaselineBtn');
 const deleteRunBtn = document.getElementById('deleteRunBtn');
+const runVideoEl = document.getElementById('runVideo');
+const runVideoPlayerEl = document.getElementById('runVideoPlayer');
+const revealVideoBtn = document.getElementById('revealVideoBtn');
 
 const lightboxEl = document.getElementById('lightbox');
 const lightboxTitleEl = document.getElementById('lightboxTitle');
@@ -37,6 +40,7 @@ async function showRunList() {
   currentReport = null;
   runDetailView.style.display = 'none';
   runListView.style.display = 'block';
+  runVideoPlayerEl.pause();
 
   const { testName, runs } = await window.api.listRuns(currentFileName);
   testTitleEl.textContent = testName;
@@ -91,6 +95,14 @@ async function showRunDetail(runId) {
   runMetaEl.textContent = started
     ? `Run #${report.runNumber} — started ${started}, finished ${finished}`
     : `Run #${report.runNumber} — finished ${finished}`;
+
+  if (report.videoUrl) {
+    runVideoPlayerEl.src = report.videoUrl;
+    runVideoEl.style.display = '';
+  } else {
+    runVideoPlayerEl.removeAttribute('src');
+    runVideoEl.style.display = 'none';
+  }
 
   const runLabel = `Run #${report.runNumber}`;
   stepListEl.innerHTML = '';
@@ -228,6 +240,10 @@ setBaselineBtn.addEventListener('click', async () => {
   if (!window.confirm(`Use Run #${currentReport.runNumber} as the new baseline for all its screenshot steps?`)) return;
   await window.api.setRunAsBaseline(currentFileName, currentRunId);
   await showRunDetail(currentRunId);
+});
+
+revealVideoBtn.addEventListener('click', () => {
+  if (currentReport && currentReport.videoPath) window.api.revealInFinder(currentReport.videoPath);
 });
 
 deleteRunBtn.addEventListener('click', async () => {

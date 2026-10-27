@@ -613,6 +613,17 @@ button.danger-outline:hover { background: rgba(255, 69, 58, 0.1); }
   display: flex;
   gap: 8px;
 }
+.run-video {
+  margin-bottom: 16px;
+}
+.run-video video {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  background: #000;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
 
 .step-card {
   border: 1px solid #d8d8dc;

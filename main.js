@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, screen, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, screen, shell, nativeImage, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -91,7 +91,13 @@ let overlayWindow = null;
 let resultsWindow = null;
 let editorWindow = null;
 let baselinePreviewWindow = null;
+let recorderWindow = null;
 let currentRun = null;
+
+// Global so they work while the app under test has focus (the overlay blurs itself after Next Step).
+const NEXT_STEP_SHORTCUT = 'Control+Alt+Right';
+const PREV_STEP_SHORTCUT = 'Control+Alt+Left';
+const RECORDER_STOP_TIMEOUT_MS = 5000;
 
 function readTest(fileName) {
   return JSON.parse(fs.readFileSync(path.join(smokeTestsDir, fileName), 'utf-8'));
@@ -260,6 +266,97 @@ async function captureScreen() {
   const png = source.thumbnail.toPNG();
   if (wasVisible) overlayWindow.show();
   return png;
+}
+
+// Video is recorded in a hidden window (MediaRecorder needs a renderer) and streamed to disk in
+// chunks, so a long run never sits in memory and a crash still leaves a playable partial file.
+async function startRecording() {
+  const primary = screen.getPrimaryDisplay();
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
+  const source = sources.find((s) => s.display_id === String(primary.id)) || sources[0];
+  if (!source) {
+    dialog.showMessageBox(overlayWindow || startWindow, {
+      type: 'warning',
+      message: 'Video recording could not start.',
+      detail: 'No screen was found to record. The run continues without video.',
+    });
+    return;
+  }
+  recorderWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+  recorderWindow.loadFile(path.join(__dirname, 'src', 'recorder.html'));
+  recorderWindow.webContents.once('did-finish-load', () => {
+    recorderWindow.webContents.send('recorder-start', {
+      sourceId: source.id,
+      width: primary.size.width,
+      height: primary.size.height,
+    });
+  });
+  recorderWindow.on('closed', () => {
+    recorderWindow = null;
+  });
+}
+
+function stopRecording() {
+  if (!recorderWindow) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      ipcMain.removeListener('recorder-stopped', finish);
+      if (recorderWindow) recorderWindow.close();
+      resolve();
+    };
+    const timer = setTimeout(finish, RECORDER_STOP_TIMEOUT_MS);
+    ipcMain.on('recorder-stopped', finish);
+    recorderWindow.webContents.send('recorder-stop');
+  });
+}
+
+ipcMain.on('recorder-started', (_event, mimeType) => {
+  if (!currentRun) return;
+  const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+  currentRun.videoPath = path.join(currentRun.runDir, `recording.${ext}`);
+});
+
+ipcMain.on('recorder-chunk', (_event, chunk) => {
+  if (!currentRun || !currentRun.videoPath) return;
+  fs.appendFileSync(currentRun.videoPath, Buffer.from(chunk));
+});
+
+ipcMain.on('recorder-error', (_event, message) => {
+  if (recorderWindow) recorderWindow.close();
+  dialog.showMessageBox(overlayWindow || startWindow, {
+    type: 'warning',
+    message: 'Video recording could not start.',
+    detail: `${message}\n\nThe run continues without video. Check that Smoker has Screen Recording permission.`,
+  });
+});
+
+function registerStepShortcuts() {
+  const failed = [
+    [NEXT_STEP_SHORTCUT, goToNextStep],
+    [PREV_STEP_SHORTCUT, goToPrevStep],
+  ]
+    .filter(([accelerator, handler]) => !globalShortcut.register(accelerator, handler))
+    .map(([accelerator]) => accelerator);
+  if (failed.length > 0) {
+    dialog.showMessageBox(overlayWindow || startWindow, {
+      type: 'warning',
+      message: 'Step shortcuts are not available.',
+      detail: `Another app already uses ${failed.join(' and ')}. Use the overlay buttons instead.`,
+    });
+  }
+}
+
+function unregisterStepShortcuts() {
+  globalShortcut.unregister(NEXT_STEP_SHORTCUT);
+  globalShortcut.unregister(PREV_STEP_SHORTCUT);
 }
 
 async function buildCollage(entries) {
@@ -501,7 +598,18 @@ ipcMain.handle('download-test-content', async (_event, { fileName, content }) =>
   return { saved: true };
 });
 
-ipcMain.handle('start-run', (_event, fileName) => {
+ipcMain.handle('start-run', async (_event, fileName) => {
+  const { response } = await dialog.showMessageBox(startWindow, {
+    type: 'question',
+    message: 'Record a video of this run?',
+    detail: 'The whole screen is recorded until you press End Run. The video is saved with the run.',
+    buttons: ['Record Video', 'No Video', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  if (response === 2) return { cancelled: true };
+  const recordVideo = response === 0;
+
   const json = readTest(fileName);
   const testSlug = slugify(json.name);
   const runId = new Date().toISOString().replace(/[:.]/g, '-');
@@ -521,10 +629,13 @@ ipcMain.handle('start-run', (_event, fileName) => {
     runDir,
     baselineDir,
     results: {},
+    videoPath: null,
   };
 
   createOverlayWindow();
   startWindow.hide();
+  registerStepShortcuts();
+  if (recordVideo) await startRecording();
   return { totalSteps: json.steps.length };
 });
 
@@ -567,16 +678,16 @@ ipcMain.handle('view-baseline', () => {
   return { exists: true };
 });
 
-ipcMain.handle('prev-step', () => {
+function goToPrevStep() {
   if (!currentRun) return null;
   if (currentRun.stepIndex > 0) {
     currentRun.stepIndex -= 1;
     sendStepUpdate();
   }
   return { stepIndex: currentRun.stepIndex };
-});
+}
 
-ipcMain.handle('next-step', () => {
+function goToNextStep() {
   if (!currentRun) return null;
   if (currentRun.stepIndex < currentRun.steps.length - 1) {
     currentRun.stepIndex += 1;
@@ -584,10 +695,17 @@ ipcMain.handle('next-step', () => {
   }
   if (overlayWindow) overlayWindow.blur();
   return { stepIndex: currentRun.stepIndex, isLast: currentRun.stepIndex === currentRun.steps.length - 1 };
-});
+}
 
-ipcMain.handle('end-run', () => {
-  if (!currentRun) return null;
+ipcMain.handle('prev-step', () => goToPrevStep());
+ipcMain.handle('next-step', () => goToNextStep());
+
+ipcMain.handle('end-run', async () => {
+  if (!currentRun || currentRun.ending) return null;
+  currentRun.ending = true;
+  unregisterStepShortcuts();
+  await stopRecording();
+
   const results = currentRun.steps
     .filter((step) => currentRun.results[step.id])
     .map((step) => currentRun.results[step.id]);
@@ -596,6 +714,7 @@ ipcMain.handle('end-run', () => {
     runId: currentRun.runId,
     startedAt: currentRun.startedAt,
     finishedAt: new Date().toISOString(),
+    videoPath: currentRun.videoPath,
     results,
   };
   fs.writeFileSync(path.join(currentRun.runDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -661,6 +780,7 @@ ipcMain.handle('get-run-report', (_event, { fileName, runId }) => {
   const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
 
   report.runNumber = getRunIdsAscending(runsDir).indexOf(runId) + 1;
+  report.videoUrl = toFileUrl(report.videoPath);
   report.results = report.results.map((r) => {
     const baselinePath = path.join(baselineDir, `step-${r.stepId}.png`);
     return {
@@ -727,6 +847,10 @@ ipcMain.handle('download-collage', async (_event, { fileName, runId, stepId }) =
 app.whenReady().then(() => {
   ensureDirs();
   createStartWindow();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {
